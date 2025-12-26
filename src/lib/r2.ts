@@ -1,25 +1,32 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
-
-// Initialize S3 Client for Cloudflare R2
-const R2 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`,
-    credentials: {
-        accessKeyId: R2_ACCESS_KEY_ID || '',
-        secretAccessKey: R2_SECRET_ACCESS_KEY || '',
-    },
-});
+function getR2Client() {
+    const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+    const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+    const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+    
+    if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+        throw new Error('R2 credentials not configured');
+    }
+    
+    return new S3Client({
+        region: 'auto',
+        endpoint: `https://${R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`,
+        credentials: {
+            accessKeyId: R2_ACCESS_KEY_ID,
+            secretAccessKey: R2_SECRET_ACCESS_KEY,
+        },
+    });
+}
 
 export async function uploadFileToR2(
     fileBuffer: Buffer,
     fileName: string,
     contentType: string
 ): Promise<string> {
+    const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+    const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+    
     if (!R2_BUCKET_NAME || !R2_ACCOUNT_ID) {
         console.error('R2 credentials missing');
         return '';
@@ -27,6 +34,7 @@ export async function uploadFileToR2(
 
     try {
         const key = `${Date.now()}-${fileName}`;
+        const R2 = getR2Client();
 
         await R2.send(
             new PutObjectCommand({
