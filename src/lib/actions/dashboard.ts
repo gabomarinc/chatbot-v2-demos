@@ -354,6 +354,7 @@ export async function getConversations() {
         },
         include: {
             agent: true,
+            channel: true,
             messages: {
                 orderBy: { createdAt: 'desc' },
                 take: 1
