@@ -1,12 +1,19 @@
 import { google } from 'googleapis';
 
-const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.NEXT_PUBLIC_APP_URL + '/api/auth/google/callback'
-);
+function getOAuth2Client() {
+    const redirectUri = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000')
+        .trim()
+        .replace(/\/$/, '') + '/api/auth/google/callback';
+    
+    return new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        redirectUri
+    );
+}
 
 export function getGoogleAuthUrl(agentId: string) {
+    const oauth2Client = getOAuth2Client();
     return oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.readonly'],
@@ -16,6 +23,7 @@ export function getGoogleAuthUrl(agentId: string) {
 }
 
 export async function getGoogleTokens(code: string) {
+    const oauth2Client = getOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
     return tokens;
 }
