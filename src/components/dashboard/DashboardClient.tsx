@@ -219,8 +219,7 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                                                 key={`cell-${index}`} 
                                                 fill={entry.count > 0 ? "#21AC96" : "#e5e7eb"}
                                                 style={{ 
-                                                    cursor: entry.count > 0 ? 'pointer' : 'default',
-                                                    filter: entry.count > 0 ? 'drop-shadow(0 2px 4px rgba(33, 172, 150, 0.1))' : 'none'
+                                                    cursor: entry.count > 0 ? 'pointer' : 'default'
                                                 }}
                                             />
                                         ))}
