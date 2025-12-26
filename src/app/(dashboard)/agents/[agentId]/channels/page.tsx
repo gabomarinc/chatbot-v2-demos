@@ -1,0 +1,95 @@
+import { prisma } from '@/lib/prisma';
+import { notFound } from 'next/navigation';
+import { MessageCircle, Globe, Instagram, Send, Sparkles } from 'lucide-react';
+import { getAgentFull } from '@/lib/actions/dashboard';
+import { ConnectChannelButton } from '@/components/agents/ConnectChannelButton';
+
+export default async function AgentChannelsPage({ params }: { params: Promise<{ agentId: string }> }) {
+    const { agentId } = await params;
+    const agent = await getAgentFull(agentId);
+
+    if (!agent) {
+        notFound();
+    }
+
+    const channels = agent.channels || [];
+
+    const getChannelIcon = (type: string) => {
+        switch (type) {
+            case 'WHATSAPP': return <MessageCircle className="w-6 h-6 text-white" />;
+            case 'INSTAGRAM': return <Instagram className="w-6 h-6 text-white" />;
+            case 'WEBCHAT': return <Globe className="w-6 h-6 text-white" />;
+            default: return <Send className="w-6 h-6 text-white" />;
+        }
+    };
+
+    const getChannelColor = (type: string) => {
+        switch (type) {
+            case 'WHATSAPP': return 'bg-[#25D366]'; // WhatsApp Green
+            case 'INSTAGRAM': return 'bg-gradient-to-tr from-[#FF0069] to-[#C13584]'; // Instagram Gradient (simplified)
+            case 'WEBCHAT': return 'bg-[#21AC96]'; // Brand Color
+            default: return 'bg-gray-400';
+        }
+    };
+
+    const getChannelName = (type: string) => {
+        switch (type) {
+            case 'WHATSAPP': return 'WhatsApp';
+            case 'INSTAGRAM': return 'Instagram';
+            case 'WEBCHAT': return 'Webchat';
+            default: return type;
+        }
+    };
+
+    return (
+        <div className="max-w-3xl animate-fade-in">
+            <div className="space-y-8">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-gray-900 font-extrabold text-2xl tracking-tight mb-2">Canales conectados</h3>
+                        <p className="text-gray-500 font-medium">Gestiona los canales donde este agente está activo</p>
+                    </div>
+                    <ConnectChannelButton agentId={agentId} />
+                </div>
+
+                {channels.length > 0 ? (
+                    <div className="grid gap-4">
+                        {channels.map((channel) => (
+                            <div key={channel.id} className="bg-white rounded-[1.5rem] p-6 border border-gray-100 flex items-center justify-between hover:border-[#21AC96]/20 hover:shadow-xl hover:shadow-[#21AC96]/5 transition-all group">
+                                <div className="flex items-center gap-5">
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform duration-300 ${getChannelColor(channel.type)}`}>
+                                        {getChannelIcon(channel.type)}
+                                    </div>
+                                    <div>
+                                        <div className="text-lg font-bold text-gray-900 mb-1">{getChannelName(channel.type)}</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${channel.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`}></div>
+                                            <span className={`text-xs font-bold uppercase tracking-wider ${channel.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                                                {channel.isActive ? 'Conectado' : 'Desconectado'}
+                                            </span>
+                                            <span className="text-gray-300 px-1">•</span>
+                                            <span className="text-xs text-gray-400 font-medium">{channel.displayName}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className="px-4 py-2 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors">
+                                    Configurar
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-100 text-center">
+                        <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center shadow-sm mb-6">
+                            <Sparkles className="w-10 h-10 text-gray-300" />
+                        </div>
+                        <h4 className="text-gray-900 font-bold text-lg mb-2">Sin canales conectados</h4>
+                        <p className="text-gray-400 max-w-sm mx-auto mb-8 font-medium">
+                            Conecta tu agente a canales como WhatsApp o tu sitio web para empezar a recibir mensajes.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

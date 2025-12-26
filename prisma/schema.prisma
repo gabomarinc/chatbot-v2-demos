@@ -1,0 +1,349 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String            @id @default(cuid())
+  name         String?
+  email        String            @unique
+  passwordHash String
+  image        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  role         AppRole           @default(USER)
+  workspaces   Workspace[]
+  memberships  WorkspaceMember[]
+}
+
+model GlobalConfig {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Workspace {
+  id            String            @id @default(cuid())
+  name          String
+  createdAt     DateTime          @default(now())
+  ownerId       String
+  agents        Agent[]
+  costTracking  CostTracking[]
+  creditBalance CreditBalance?
+  payments      Payment[]
+  subscription  Subscription?
+  usageLogs     UsageLog[]
+  owner         User              @relation(fields: [ownerId], references: [id])
+  members       WorkspaceMember[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole
+  user        User          @relation(fields: [userId], references: [id])
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+model Agent {
+  id                 String             @id @default(cuid())
+  workspaceId        String
+  name               String
+  avatarUrl          String?
+  communicationStyle CommunicationStyle
+  personalityPrompt  String
+  jobType            AgentJobType
+  jobCompany         String?
+  jobWebsiteUrl      String?
+  jobDescription     String?
+  model              String
+  temperature        Float              @default(0.3)
+  timezone           String             @default("UTC")
+  allowEmojis        Boolean            @default(false)
+  signMessages       Boolean            @default(true)
+  restrictTopics     Boolean            @default(false)
+  splitLongMessages  Boolean            @default(true)
+  allowReminders     Boolean            @default(false)
+  smartRetrieval     Boolean            @default(false)
+  transferToHuman    Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id])
+  integrations       AgentIntegration[]
+  mcpServers         AgentMCPServer[]
+  channels           Channel[]
+  conversations      Conversation[]
+  intents            Intent[]
+  knowledgeBases     KnowledgeBase[]
+}
+
+model KnowledgeBase {
+  id      String            @id @default(cuid())
+  agentId String
+  name    String
+  agent   Agent             @relation(fields: [agentId], references: [id])
+  sources KnowledgeSource[]
+}
+
+model KnowledgeSource {
+  id              String              @id @default(cuid())
+  knowledgeBaseId String
+  type            KnowledgeSourceType
+  url             String?
+  fileUrl         String?
+  status          KnowledgeStatus
+  updateInterval  UpdateInterval      @default(NEVER)
+  crawlSubpages   Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  chunks          DocumentChunk[]
+  knowledgeBase   KnowledgeBase       @relation(fields: [knowledgeBaseId], references: [id])
+}
+
+model DocumentChunk {
+  id                String          @id @default(cuid())
+  knowledgeSourceId String
+  content           String
+  embedding         Json
+  createdAt         DateTime        @default(now())
+  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id])
+}
+
+model Channel {
+  id            String         @id @default(cuid())
+  agentId       String
+  type          ChannelType
+  displayName   String
+  configJson    Json
+  isActive      Boolean        @default(false)
+  agent         Agent          @relation(fields: [agentId], references: [id])
+  conversations Conversation[]
+}
+
+model Conversation {
+  id            String             @id @default(cuid())
+  agentId       String
+  channelId     String?
+  externalId    String
+  contactName   String?
+  contactEmail  String?
+  status        ConversationStatus @default(OPEN)
+  lastMessageAt DateTime?
+  createdAt     DateTime           @default(now())
+  agent         Agent              @relation(fields: [agentId], references: [id])
+  channel       Channel?           @relation(fields: [channelId], references: [id])
+  messages      Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model Intent {
+  id             String    @id @default(cuid())
+  agentId        String
+  name           String
+  description    String?
+  trigger        String    // Regex pattern or keywords
+  enabled        Boolean   @default(true)
+  
+  // Action configuration
+  actionType     String    @default("WEBHOOK") // "WEBHOOK", "INTERNAL", "FORM"
+  actionUrl      String?   // For webhooks
+  payloadJson    Json?     // Action-specific config
+  
+  // Analytics
+  triggerCount   Int       @default(0)
+  lastTriggered  DateTime?
+  
+  agent          Agent     @relation(fields: [agentId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+}
+
+model AgentIntegration {
+  id         String              @id @default(cuid())
+  agentId    String
+  provider   IntegrationProvider
+  configJson Json
+  enabled    Boolean             @default(false)
+  agent      Agent               @relation(fields: [agentId], references: [id])
+}
+
+model AgentMCPServer {
+  id       String  @id @default(cuid())
+  agentId  String
+  name     String
+  endpoint String
+  apiKey   String?
+  agent    Agent   @relation(fields: [agentId], references: [id])
+}
+
+model SubscriptionPlan {
+  id              String         @id @default(cuid())
+  name            String
+  type            PlanType
+  monthlyPrice    Float
+  creditsPerMonth Int
+  maxAgents       Int
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  subscriptions   Subscription[]
+}
+
+model Subscription {
+  id                   String           @id @default(cuid())
+  workspaceId          String           @unique
+  planId               String
+  status               String           @default("active")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodStart   DateTime         @default(now())
+  currentPeriodEnd     DateTime
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  payments             Payment[]
+  plan                 SubscriptionPlan @relation(fields: [planId], references: [id])
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  subscriptionId  String?
+  workspaceId     String
+  amount          Float
+  currency        String        @default("USD")
+  type            String
+  status          String
+  stripePaymentId String?
+  creditsAdded    Int?
+  createdAt       DateTime      @default(now())
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id])
+}
+
+model CostTracking {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  model         String
+  creditsUsed   Int
+  estimatedCost Float
+  date          DateTime  @default(now())
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+model CreditBalance {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  balance     Int       @default(0)
+  totalUsed   Int       @default(0)
+  lastResetAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+model UsageLog {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  agentId        String?
+  conversationId String?
+  tokensUsed     Int
+  creditsUsed    Int
+  model          String
+  createdAt      DateTime  @default(now())
+  channelId      String?
+  workspace      Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+enum AppRole {
+  USER
+  SUPER_ADMIN
+}
+
+enum WorkspaceRole {
+  OWNER
+  MANAGER
+  AGENT
+}
+
+enum CommunicationStyle {
+  FORMAL
+  NORMAL
+  CASUAL
+}
+
+enum AgentJobType {
+  SUPPORT
+  SALES
+  PERSONAL
+}
+
+enum KnowledgeSourceType {
+  TEXT
+  WEBSITE
+  VIDEO
+  DOCUMENT
+}
+
+enum KnowledgeStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum UpdateInterval {
+  NEVER
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ChannelType {
+  WHATSAPP
+  INSTAGRAM
+  MESSENGER
+  WEBCHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+enum MessageRole {
+  USER
+  AGENT
+  HUMAN
+}
+
+enum IntegrationProvider {
+  ELEVENLABS
+  GOOGLE_CALENDAR
+  PLUGCHAT
+  EVENDI
+}
+
+enum PlanType {
+  FRESHIE
+  MONEY_HONEY
+  WOLF_OF_WALLSTREET
+  CUSTOM
+}

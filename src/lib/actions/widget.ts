@@ -1,0 +1,405 @@
+'use server'
+
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
+import { prisma } from '@/lib/prisma';
+import { Message } from '@prisma/client';
+import { generateEmbedding, cosineSimilarity } from '@/lib/ai';
+import { listAvailableSlots, createCalendarEvent } from '@/lib/google';
+
+export async function sendWidgetMessage(data: {
+    channelId: string;
+    content: string;
+    visitorId: string; // Used as externalId
+    metadata?: any; // Optional metadata for file attachments
+}) {
+    // 0. Resolve API Keys (Env vs DB)
+    let openaiKey = process.env.OPENAI_API_KEY;
+    let googleKey = process.env.GOOGLE_API_KEY;
+
+    // Only fetch from DB if env vars are missing
+    if (!openaiKey || !googleKey) {
+        const configs = await (prisma as any).globalConfig.findMany({
+            where: {
+                key: { in: ['OPENAI_API_KEY', 'GOOGLE_API_KEY'] }
+            }
+        });
+
+        if (!openaiKey) openaiKey = configs.find((c: any) => c.key === 'OPENAI_API_KEY')?.value;
+        if (!googleKey) googleKey = configs.find((c: any) => c.key === 'GOOGLE_API_KEY')?.value;
+    }
+
+    // 1. Validate Channel
+    const channel = await prisma.channel.findUnique({
+        where: { id: data.channelId },
+        include: {
+            agent: {
+                include: {
+                    workspace: { include: { creditBalance: true } },
+                    integrations: { where: { provider: 'GOOGLE_CALENDAR', enabled: true } },
+                    intents: { where: { enabled: true } }
+                }
+            }
+        }
+    })
+
+    if (!channel || !channel.isActive) {
+        throw new Error("Channel not active")
+    }
+
+    const workspace = channel.agent.workspace;
+    const creditBalance = workspace.creditBalance;
+    const model = channel.agent.model;
+
+    // 2. Credit Check
+    if (!creditBalance || creditBalance.balance <= 0) {
+        console.log(`Workspace ${workspace.id} has insufficient credits.`);
+        throw new Error("Insufficient credits");
+    }
+
+    // 3. Find or Create Conversation
+    let conversation = await prisma.conversation.findFirst({
+        where: {
+            channelId: channel.id,
+            externalId: data.visitorId,
+            status: { not: 'CLOSED' }
+        }
+    })
+
+    if (!conversation) {
+        conversation = await prisma.conversation.create({
+            data: {
+                agentId: channel.agentId,
+                channelId: channel.id,
+                externalId: data.visitorId,
+                contactName: `Visitante ${data.visitorId.slice(0, 4)}`,
+                status: 'OPEN',
+                lastMessageAt: new Date()
+            }
+        })
+    } else {
+        await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { lastMessageAt: new Date() }
+        })
+    }
+
+    // 4. Save User Message
+    const userMsg = await prisma.message.create({
+        data: {
+            conversationId: conversation.id,
+            role: 'USER',
+            content: data.content
+        }
+    })
+
+    // 4.5. Check for Intent Detection
+    const { detectIntent, executeIntent } = await import('./intent-actions');
+    const detectedIntent = await detectIntent(data.content, channel.agent.intents);
+    let intentResult: any = null;
+
+    if (detectedIntent) {
+        console.log(`[INTENT DETECTED] ${detectedIntent.name} for message: ${data.content}`);
+        intentResult = await executeIntent(detectedIntent, {
+            conversation,
+            message: userMsg,
+            userMessage: data.content
+        });
+        console.log(`[INTENT RESULT]`, intentResult);
+    }
+
+    // 5. Generate AI Response
+    try {
+        // Fetch recent history for context
+        const history = await prisma.message.findMany({
+            where: { conversationId: conversation.id },
+            orderBy: { createdAt: 'desc' },
+            take: 10 // Last 10 messages
+        });
+
+        let replyContent = '...';
+        let tokensUsed = 0;
+
+        // 5.1 Retrieve Context (RAG)
+        let context = "";
+        try {
+            const queryVector = await generateEmbedding(data.content);
+            const chunks = await prisma.documentChunk.findMany({
+                where: {
+                    knowledgeSource: {
+                        knowledgeBase: { agentId: channel.agentId },
+                        status: 'READY'
+                    }
+                }
+            });
+
+            // Calculate similarity and sort
+            const sortedChunks = chunks
+                .map(chunk => ({
+                    content: chunk.content,
+                    similarity: cosineSimilarity(queryVector, chunk.embedding as number[])
+                }))
+                .filter(c => c.similarity > 0.4) // Threshold
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, 5); // Top 5 chunks
+
+            context = sortedChunks.map(c => c.content).join("\n\n");
+        } catch (ragError) {
+            console.error("RAG Retrieval Error:", ragError);
+        }
+
+        const agent = channel.agent;
+        const styleDescription = agent.communicationStyle === 'FORMAL' ? 'serio y profesional (FORMAL)' :
+            agent.communicationStyle === 'CASUAL' ? 'amigable y cercano (DESENFADADO)' : 'equilibrado (NORMAL)';
+
+        const currentTime = new Intl.DateTimeFormat('es-ES', {
+            timeZone: agent.timezone || 'UTC',
+            dateStyle: 'full',
+            timeStyle: 'long'
+        }).format(new Date());
+
+        const calendarIntegration = agent.integrations[0];
+        const hasCalendar = !!calendarIntegration;
+
+        const systemPrompt = `IDENTIDAD Y CONTEXTO LABORAL (FUNDAMENTAL):
+Eres ${agent.name}, el asistente oficial de ${agent.jobCompany || 'la empresa'}.
+Sitio Web Oficial: ${agent.jobWebsiteUrl || 'No especificado'}
+Tu Objetivo: ${agent.jobType === 'SALES' ? 'COMERCIAL (Enfocado en ventas y conversión)' : agent.jobType === 'SUPPORT' ? 'SOPORTE (Ayuda técnica y resolución)' : 'ASISTENTE GENERAL'}
+Sobre el Negocio: ${agent.jobDescription || 'Empresa profesional dedicada a sus clientes.'}
+Estilo de Comunicación: Debes ser ${styleDescription}.
+Zona Horaria del Agente: ${agent.timezone || 'UTC'}
+Fecha y hora actual en tu zona: ${currentTime}
+
+REGLAS DE COMPORTAMIENTO (PRIORIDAD ALTA):
+${agent.personalityPrompt}
+
+CONFIGURACIÓN DINÁMICA DEL CHAT:
+- Emojis: ${agent.allowEmojis ? 'ESTÁN PERMITIDOS. Úsalos para ser más expresivo.' : 'NO ESTÁN PERMITIDOS. Mantén un tono puramente textual.'}
+- Firma: ${agent.signMessages ? `DEBES FIRMAR cada mensaje al final como "- ${agent.name}".` : 'No es necesario firmar los mensajes.'}
+- Restricción de Temas: ${agent.restrictTopics ? 'ESTRICTA. Solo responde sobre temas del negocio. Si preguntan algo ajeno, declina amablemente.' : 'Flexible. Puedes charlar de forma general pero siempre volviendo al negocio.'}
+- Transferencia Humana: ${agent.transferToHuman ? 'Disponible. Si el usuario pide hablar con una persona, indícale que puedes transferirlo.' : 'No disponible por ahora.'}
+${hasCalendar ? '- Calendario: TIENES ACCESO a Google Calendar para revisar disponibilidad y agendar citas.' : '- Calendario: No disponible.'}
+
+CONOCIMIENTO ADICIONAL (ENTRENAMIENTO RAG):
+${context || 'No hay fragmentos de entrenamiento específicos para esta consulta, básate en tu Identidad y Contexto Laboral.'}
+
+INSTRUCCIONES DE EJECUCIÓN:
+1. Tu comportamiento debe estar guiado PRIMERO por el "PROMPT DE COMPORTAMIENTO" y la "Descripción del Negocio".
+2. Posees MEMORIA de la conversación. Si el usuario ya se presentó o brindó información previamente en el historial, NO la vuelvas a pedir. Úsala para personalizar la charla.
+3. Actúa siempre como un miembro experto de ${agent.jobCompany || 'la empresa'}.
+4. Si la consulta se responde con el "Conocimiento Adicional", intégralo de forma natural.
+5. Mantén el Estilo de Comunicación (${styleDescription}) en cada palabra.
+6. EXTRACCIÓN DE DATOS: Si el usuario menciona su nombre o correo electrónico, extráelos y guárdalos internamente para personalizar futuras interacciones.
+`;
+
+        // Define tools for Calendar
+        const tools: any[] = hasCalendar ? [
+            {
+                name: "revisar_disponibilidad",
+                description: "Consulta los eventos ocupados en una fecha específica para ver disponibilidad.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD" }
+                    },
+                    required: ["fecha"]
+                }
+            },
+            {
+                name: "agendar_cita",
+                description: "Crea un evento en el calendario de Google.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        resumen: { type: "string", description: "Título de la cita" },
+                        descripcion: { type: "string", description: "Detalles adicionales" },
+                        inicio: { type: "string", description: "Fecha y hora de inicio (ISO 8601)" },
+                        fin: { type: "string", description: "Fecha y hora de fin (ISO 8601)" },
+                        email: { type: "string", description: "Email del invitado (opcional)" }
+                    },
+                    required: ["resumen", "inicio", "fin"]
+                }
+            }
+        ] : [];
+
+        if (model.includes('gemini')) {
+            // Google Gemini Logic
+            if (!googleKey) throw new Error("Google API Key not configured");
+
+            // Re-instantiate with correct key
+            const currentGenAI = new GoogleGenerativeAI(googleKey);
+            const geminiModelName = "gemini-1.5-flash";
+
+            const geminiTools = hasCalendar ? [{
+                functionDeclarations: tools.map(t => ({
+                    name: t.name,
+                    description: t.description,
+                    parameters: t.parameters
+                }))
+            }] : undefined;
+
+            const googleModel = currentGenAI.getGenerativeModel({
+                model: geminiModelName,
+                systemInstruction: systemPrompt,
+                generationConfig: {
+                    temperature: agent.temperature
+                },
+                tools: geminiTools as any
+            });
+
+            const chatHistory = history.reverse().map((m: Message) => ({
+                role: m.role === 'USER' ? 'user' : 'model',
+                parts: [{ text: m.content }]
+            }));
+
+            const chat = googleModel.startChat({
+                history: chatHistory,
+            });
+
+            let result = await chat.sendMessage(data.content);
+
+            // Handle tool calls for Gemini
+            let call = result.response.functionCalls()?.[0];
+            while (call) {
+                const { name, args } = call;
+                let toolResult;
+                if (name === "revisar_disponibilidad") {
+                    toolResult = await listAvailableSlots(calendarIntegration.configJson, (args as any).fecha);
+                } else if (name === "agendar_cita") {
+                    toolResult = await createCalendarEvent(calendarIntegration.configJson, args as any);
+                }
+
+                result = await chat.sendMessage([{
+                    functionResponse: {
+                        name,
+                        response: { result: toolResult }
+                    }
+                }]);
+                call = result.response.functionCalls()?.[0];
+            }
+
+            replyContent = result.response.text();
+            tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
+
+        } else {
+            // OpenAI Logic (Default)
+            if (!openaiKey) throw new Error("OpenAI API Key not configured");
+
+            const currentOpenAI = new OpenAI({ apiKey: openaiKey });
+
+            const openAiMessages: any[] = [
+                { role: 'system', content: systemPrompt },
+                ...history.reverse().map((m: Message) => ({
+                    role: m.role === 'USER' ? 'user' : 'assistant',
+                    content: m.content
+                })),
+                { role: 'user', content: data.content }
+            ];
+
+            const openAiTools = hasCalendar ? tools.map(t => ({
+                type: 'function',
+                function: t
+            })) : undefined;
+
+            let completion = await currentOpenAI.chat.completions.create({
+                messages: openAiMessages as any,
+                model: 'gpt-4o-mini',
+                temperature: agent.temperature,
+                tools: openAiTools as any,
+            });
+
+            let message = completion.choices[0].message;
+
+            // Handle tool calls for OpenAI
+            while (message.tool_calls) {
+                openAiMessages.push(message);
+                for (const toolCall of message.tool_calls as any[]) {
+                    const { name, arguments: argsJson } = toolCall.function;
+                    const args = JSON.parse(argsJson);
+                    let toolResult;
+                    if (name === "revisar_disponibilidad") {
+                        toolResult = await listAvailableSlots(calendarIntegration.configJson, args.fecha);
+                    } else if (name === "agendar_cita") {
+                        toolResult = await createCalendarEvent(calendarIntegration.configJson, args);
+                    }
+                    openAiMessages.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: JSON.stringify(toolResult)
+                    });
+                }
+                completion = await currentOpenAI.chat.completions.create({
+                    messages: openAiMessages as any,
+                    model: 'gpt-4o-mini',
+                    temperature: agent.temperature,
+                    tools: openAiTools as any,
+                });
+                message = completion.choices[0].message;
+            }
+
+            replyContent = message.content || '...';
+            tokensUsed = completion.usage?.total_tokens || 0;
+        }
+
+        // 6. Save Agent Message
+        const agentMsg = await prisma.message.create({
+            data: {
+                conversationId: conversation.id,
+                role: 'AGENT',
+                content: replyContent
+            }
+        });
+
+        // 6.5. Extract contact info from user message (name and email)
+        const extractedName = data.content.match(/(?:me llamo|mi nombre es|soy)\s+([A-ZáéíóúÁÉÍÓÚ][a-záéíóúÁÉÍÓÚ]+(?:\s+[A-ZáéíóúÁÉÍÓÚ][a-záéíóúÁÉÍÓÚ]+)*)/i);
+        const extractedEmail = data.content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+
+        if (extractedName || extractedEmail) {
+            await prisma.conversation.update({
+                where: { id: conversation.id },
+                data: {
+                    ...(extractedName && { contactName: extractedName[1] }),
+                    ...(extractedEmail && { contactEmail: extractedEmail[0] })
+                }
+            });
+        }
+
+        // 7. Deduct Credits
+        await prisma.$transaction([
+            prisma.creditBalance.update({
+                where: { workspaceId: workspace.id },
+                data: {
+                    balance: { decrement: 1 },
+                    totalUsed: { increment: 1 }
+                }
+            }),
+            prisma.usageLog.create({
+                data: {
+                    workspaceId: workspace.id,
+                    agentId: channel.agentId,
+                    // @ts-ignore
+                    channelId: channel.id,
+                    conversationId: conversation.id,
+                    tokensUsed: tokensUsed,
+                    creditsUsed: 1,
+                    // Store strict model name used
+                    model: model.includes('gemini') ? 'gemini-1.5-flash' : 'gpt-4o-mini'
+                }
+            })
+        ]);
+
+        return { userMsg, agentMsg };
+
+    } catch (error) {
+        console.error("AI Error:", error);
+        // Fallback message if AI fails
+        const fallbackMsg = await prisma.message.create({
+            data: {
+                conversationId: conversation.id,
+                role: 'AGENT',
+                content: "Lo siento, estoy teniendo problemas de conexión en este momento."
+            }
+        });
+        return { userMsg, agentMsg: fallbackMsg };
+    }
+}

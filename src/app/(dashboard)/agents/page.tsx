@@ -1,0 +1,19 @@
+import { getAgents } from '@/lib/actions/dashboard';
+import { AgentsPageClient } from '@/components/agents/AgentsPageClient';
+
+export default async function AgentsPage() {
+    const agents = await getAgents();
+
+    // Map the agents to the format expected by the client component
+    // Prisma returns a slightly different structure that needs mapping if we want to be strict with types
+    const formattedAgents = agents.map(agent => ({
+        id: agent.id,
+        name: agent.name,
+        _count: {
+            channels: agent._count.channels,
+            conversations: agent._count.conversations
+        }
+    }));
+
+    return <AgentsPageClient initialAgents={formattedAgents} />;
+}
