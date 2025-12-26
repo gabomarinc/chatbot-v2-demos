@@ -358,6 +358,9 @@ export async function getConversations() {
             messages: {
                 orderBy: { createdAt: 'desc' },
                 take: 1
+            },
+            _count: {
+                select: { messages: true }
             }
         },
         orderBy: { lastMessageAt: 'desc' }
