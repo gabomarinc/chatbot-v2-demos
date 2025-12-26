@@ -13,6 +13,7 @@ export async function sendWidgetMessage(data: {
     visitorId: string; // Used as externalId
     metadata?: any; // Optional metadata for file attachments
 }) {
+    try {
     // 0. Resolve API Keys (Env vs DB)
     let openaiKey = process.env.OPENAI_API_KEY;
     let googleKey = process.env.GOOGLE_API_KEY;
@@ -120,32 +121,35 @@ export async function sendWidgetMessage(data: {
         let replyContent = '...';
         let tokensUsed = 0;
 
-        // 5.1 Retrieve Context (RAG)
+        // 5.1 Retrieve Context (RAG) - Optional, don't fail if it errors
         let context = "";
         try {
-            const queryVector = await generateEmbedding(data.content);
-            const chunks = await prisma.documentChunk.findMany({
-                where: {
-                    knowledgeSource: {
-                        knowledgeBase: { agentId: channel.agentId },
-                        status: 'READY'
+            if (openaiKey) {
+                const queryVector = await generateEmbedding(data.content);
+                const chunks = await prisma.documentChunk.findMany({
+                    where: {
+                        knowledgeSource: {
+                            knowledgeBase: { agentId: channel.agentId },
+                            status: 'READY'
+                        }
                     }
-                }
-            });
+                });
 
-            // Calculate similarity and sort
-            const sortedChunks = chunks
-                .map(chunk => ({
-                    content: chunk.content,
-                    similarity: cosineSimilarity(queryVector, chunk.embedding as number[])
-                }))
-                .filter(c => c.similarity > 0.4) // Threshold
-                .sort((a, b) => b.similarity - a.similarity)
-                .slice(0, 5); // Top 5 chunks
+                // Calculate similarity and sort
+                const sortedChunks = chunks
+                    .map(chunk => ({
+                        content: chunk.content,
+                        similarity: cosineSimilarity(queryVector, chunk.embedding as number[])
+                    }))
+                    .filter(c => c.similarity > 0.4) // Threshold
+                    .sort((a, b) => b.similarity - a.similarity)
+                    .slice(0, 5); // Top 5 chunks
 
-            context = sortedChunks.map(c => c.content).join("\n\n");
+                context = sortedChunks.map(c => c.content).join("\n\n");
+            }
         } catch (ragError) {
-            console.error("RAG Retrieval Error:", ragError);
+            console.error("RAG Retrieval Error (non-critical, continuing):", ragError);
+            // Continue without context if RAG fails
         }
 
         const agent = channel.agent;
@@ -408,5 +412,14 @@ INSTRUCCIONES DE EJECUCIÓN:
             }
         });
         return { userMsg, agentMsg: fallbackMsg };
+    }
+    } catch (outerError) {
+        // Catch any error that occurs before the inner try-catch
+        console.error("Widget Message Error (outer catch):", outerError);
+        const errorMessage = outerError instanceof Error ? outerError.message : 'Unknown error';
+        console.error("Error details:", errorMessage);
+        
+        // Re-throw with more context for the client
+        throw new Error(`Error procesando mensaje: ${errorMessage}`);
     }
 }
