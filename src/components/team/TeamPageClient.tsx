@@ -30,6 +30,7 @@ interface TeamPageClientProps {
     currentMemberCount: number;
     maxMembers: number;
     currentUserId?: string;
+    currentPlanName?: string;
 }
 
 export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers, currentUserId, currentPlanName = 'Actual' }: TeamPageClientProps) {
@@ -210,33 +211,18 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers,
                     </div>
                     <div className="relative">
                         <button 
-                            ref={inviteButtonRef}
-                            onClick={() => setIsInviteModalOpen(true)}
-                            onMouseEnter={() => !canInvite && setShowTooltip(true)}
-                            onMouseLeave={() => setShowTooltip(false)}
-                            disabled={!canInvite}
-                            className="flex items-center gap-2 px-5 py-3 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => {
+                                if (canInvite) {
+                                    setIsInviteModalOpen(true);
+                                } else {
+                                    setIsMaxMembersModalOpen(true);
+                                }
+                            }}
+                            className="flex items-center gap-2 px-5 py-3 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer active:scale-95"
                         >
                             <Plus className="w-5 h-5" />
                             Invitar Colaborador
                         </button>
-                        {!canInvite && showTooltip && inviteButtonRef.current && mounted && (
-                            createPortal(
-                                <div 
-                                    className="fixed bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-[200] shadow-lg max-w-xs"
-                                    style={{
-                                        bottom: `${window.innerHeight - inviteButtonRef.current.getBoundingClientRect().top + 8}px`,
-                                        left: `${Math.max(16, Math.min(inviteButtonRef.current.getBoundingClientRect().left - 100, window.innerWidth - 250))}px`,
-                                    }}
-                                >
-                                    Has alcanzado el límite de miembros ({maxMembers}/{maxMembers}). Actualiza tu plan para invitar más.
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-                                        <div className="border-4 border-transparent border-t-gray-900"></div>
-                                    </div>
-                                </div>,
-                                document.body
-                            )
-                        )}
                     </div>
                 </div>
 
