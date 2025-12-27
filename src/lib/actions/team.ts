@@ -229,6 +229,18 @@ export async function removeTeamMember(memberId: string) {
             where: { id: memberId }
         })
 
+        // Check if user has any other workspace memberships
+        const otherMemberships = await prisma.workspaceMember.count({
+            where: { userId: member.user.id }
+        })
+
+        // If user has no other memberships, delete the user account
+        if (otherMemberships === 0) {
+            await prisma.user.delete({
+                where: { id: member.user.id }
+            })
+        }
+
         revalidatePath('/team')
         revalidatePath('/dashboard')
         return { success: true }
