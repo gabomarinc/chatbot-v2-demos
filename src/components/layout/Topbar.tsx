@@ -5,13 +5,19 @@ import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { getDashboardStats } from '@/lib/actions/dashboard';
+import { getDashboardStats, getCreditsDetails } from '@/lib/actions/dashboard';
+import { CreditsDetailsModal } from '@/components/dashboard/CreditsDetailsModal';
 
 export function Topbar() {
     const { data: session } = useSession();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [credits, setCredits] = useState<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    
+    // Credits modal state
+    const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
+    const [creditsData, setCreditsData] = useState<any>(null);
+    const [isLoadingCredits, setIsLoadingCredits] = useState(false);
 
     const userInitial = session?.user?.name ? session.user.name.charAt(0).toUpperCase() : 'U';
     const userName = session?.user?.name || 'Usuario';
@@ -56,7 +62,21 @@ export function Topbar() {
             {/* Right side */}
             <div className="flex items-center gap-6">
                 {/* Credits */}
-                <div className="flex items-center gap-2.5 px-4 py-2 bg-[#21AC96]/5 rounded-2xl border border-[#21AC96]/10 hover:bg-[#21AC96]/10 transition-all duration-300 cursor-pointer group active:scale-95 hover:shadow-sm">
+                <div 
+                    onClick={async () => {
+                        setIsCreditsModalOpen(true);
+                        setIsLoadingCredits(true);
+                        try {
+                            const data = await getCreditsDetails();
+                            setCreditsData(data);
+                        } catch (error) {
+                            console.error('Error loading credits details:', error);
+                        } finally {
+                            setIsLoadingCredits(false);
+                        }
+                    }}
+                    className="flex items-center gap-2.5 px-4 py-2 bg-[#21AC96]/5 rounded-2xl border border-[#21AC96]/10 hover:bg-[#21AC96]/10 transition-all duration-300 cursor-pointer group active:scale-95 hover:shadow-sm"
+                >
                     <div className="w-8 h-8 bg-white shadow-sm rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                         <Coins className="w-4 h-4 text-[#21AC96] group-hover:rotate-12 transition-transform duration-300" />
                     </div>
@@ -144,6 +164,14 @@ export function Topbar() {
                     )}
                 </div>
             </div>
+
+            {/* Credits Details Modal */}
+            <CreditsDetailsModal
+                isOpen={isCreditsModalOpen}
+                onClose={() => setIsCreditsModalOpen(false)}
+                creditsData={creditsData}
+                isLoading={isLoadingCredits}
+            />
         </div>
     );
 }
