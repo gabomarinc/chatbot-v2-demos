@@ -186,12 +186,16 @@ export function Topbar() {
                     {isUserMenuOpen && (
                         <div className="absolute right-0 mt-3 w-64 bg-white rounded-3xl shadow-2xl shadow-gray-200/50 border border-gray-50 p-2 animate-in fade-in zoom-in-95 duration-200 isolate">
                             <div className="space-y-1">
-                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 group">
+                                <Link
+                                    href="/profile"
+                                    onClick={() => setIsUserMenuOpen(false)}
+                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 group"
+                                >
                                     <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
                                         <User className="w-4 h-4" />
                                     </div>
                                     <span className="text-sm font-semibold">Perfil</span>
-                                </button>
+                                </Link>
                                 <Link
                                     href="/billing"
                                     onClick={() => setIsUserMenuOpen(false)}
