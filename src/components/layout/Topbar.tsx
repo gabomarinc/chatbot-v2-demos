@@ -55,8 +55,8 @@ export function Topbar() {
     // User role state
     const [userRole, setUserRole] = useState<'OWNER' | 'MANAGER' | 'AGENT' | null>(null);
 
-    // Always show "Mi cuenta" instead of waiting for user name
-    const displayText = 'Mi cuenta';
+    // Always show "Mi Cuenta" instead of waiting for user name
+    const displayText = 'Mi Cuenta';
     const currentDate = format(new Date(), 'dd MMM yyyy', { locale: es });
 
     useEffect(() => {
