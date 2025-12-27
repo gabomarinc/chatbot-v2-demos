@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react';
-import { Plus, User, Mail, Shield, MoreVertical, Trash2, Edit, Users } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, User, Mail, Shield, MoreVertical, Trash2, Edit, Users, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InviteMemberModal } from './InviteMemberModal';
 import { removeTeamMember, updateTeamMemberRole } from '@/lib/actions/team';
@@ -14,6 +14,8 @@ interface TeamMember {
         id: string;
         name: string | null;
         email: string;
+        createdAt: Date;
+        updatedAt: Date;
     };
 }
 
@@ -29,6 +31,21 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isActionMenuOpen, setIsActionMenuOpen] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Helper to check if user has logged in (simple heuristic: if updatedAt is significantly different from createdAt)
+    const hasLoggedIn = (member: TeamMember) => {
+        const createdAt = new Date(member.user.createdAt).getTime();
+        const updatedAt = new Date(member.user.updatedAt).getTime();
+        const diffMs = updatedAt - createdAt;
+        // If updated more than 10 minutes after creation, assume they've logged in (updatedAt gets updated on login)
+        return diffMs > 10 * 60 * 1000;
+    };
 
     const getRoleLabel = (role: string) => {
         switch (role) {
@@ -98,128 +115,180 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
         }
     };
 
+    const handleInviteSuccess = async () => {
+        // Refresh the page to show new member
+        router.refresh();
+        // Wait a moment and refresh again to ensure data is synced
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        router.refresh();
+    };
+
     const canInvite = currentMemberCount < maxMembers;
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (isActionMenuOpen) {
+                const menuElement = actionMenuRefs.current[isActionMenuOpen];
+                if (menuElement && !menuElement.contains(event.target as Node)) {
+                    setIsActionMenuOpen(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isActionMenuOpen]);
 
     return (
         <>
             <div className="max-w-[1600px] mx-auto animate-fade-in">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-                <div>
-                    <h1 className="text-gray-900 text-3xl font-extrabold tracking-tight mb-3">Equipo</h1>
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <p className="text-gray-500 font-medium">
-                            Gestiona los permisos y accesos de tus colaboradores
-                        </p>
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold border bg-blue-50 text-blue-600 border-blue-100">
-                            <Users className="w-4 h-4" />
-                            <span>{currentMemberCount}/{maxMembers} miembros</span>
+                    <div>
+                        <h1 className="text-gray-900 text-3xl font-extrabold tracking-tight mb-3">Equipo</h1>
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <p className="text-gray-500 font-medium">
+                                Gestiona los permisos y accesos de tus colaboradores
+                            </p>
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold border bg-blue-50 text-blue-600 border-blue-100">
+                                <Users className="w-4 h-4" />
+                                <span>{currentMemberCount}/{maxMembers} miembros</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                    <button 
-                        onClick={() => setIsInviteModalOpen(true)}
-                        disabled={!canInvite}
-                        className="flex items-center gap-2 px-5 py-3 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer group active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-                        Invitar Colaborador
-                    </button>
+                    <div className="relative group">
+                        <button 
+                            onClick={() => setIsInviteModalOpen(true)}
+                            disabled={!canInvite}
+                            className="flex items-center gap-2 px-5 py-3 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Invitar Colaborador
+                        </button>
+                        {!canInvite && (
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                                Has alcanzado el límite de miembros ({maxMembers}/{maxMembers}). Actualiza tu plan para invitar más.
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                                    <div className="border-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* List */}
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)] overflow-hidden">
-                    <div className="overflow-x-auto">
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)]">
+                    <div className="overflow-x-auto overflow-y-visible">
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="border-b border-gray-50">
                                     <th className="px-8 py-6 text-xs font-bold text-gray-400 uppercase tracking-widest">Usuario / Email</th>
                                     <th className="px-8 py-6 text-xs font-bold text-gray-400 uppercase tracking-widest">Rol del Sistema</th>
                                     <th className="px-8 py-6 text-xs font-bold text-gray-400 uppercase tracking-widest">Estado</th>
-                                    <th className="px-8 py-6 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Acciones</th>
+                                    <th className="px-8 py-6 text-xs font-bold text-gray-400 uppercase tracking-widest">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {members.length > 0 ? (
-                                    members.map((member) => (
-                                        <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-2xl bg-[#21AC96]/5 flex items-center justify-center text-[#21AC96] group-hover:scale-110 transition-transform shadow-sm">
-                                                        <User className="w-6 h-6" />
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-gray-900 font-extrabold tracking-tight">{member.user.name || 'Sin nombre'}</span>
-                                                        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-                                                            <Mail className="w-3 h-3" />
-                                                            {member.user.email}
+                                    members.map((member) => {
+                                        const isActive = hasLoggedIn(member);
+                                        return (
+                                            <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
+                                                <td className="px-8 py-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 rounded-2xl bg-[#21AC96]/5 flex items-center justify-center text-[#21AC96] group-hover:scale-110 transition-transform shadow-sm">
+                                                            <User className="w-6 h-6" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-gray-900 font-extrabold tracking-tight">{member.user.name || 'Sin nombre'}</span>
+                                                            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                                                                <Mail className="w-3 h-3" />
+                                                                {member.user.email}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className={cn(
-                                                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border",
-                                                    getRoleBadgeStyle(member.role)
-                                                )}>
-                                                    <Shield className="w-3 h-3" />
-                                                    {getRoleLabel(member.role)}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                                    <span className="text-sm text-gray-700 font-bold">Activo</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-6 text-right">
-                                                <div className="relative inline-block">
-                                                    <button 
-                                                        onClick={() => setIsActionMenuOpen(isActionMenuOpen === member.id ? null : member.id)}
-                                                        disabled={member.role === 'OWNER'}
-                                                        className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        <MoreVertical className="w-5 h-5" />
-                                                    </button>
-                                                    
-                                                    {isActionMenuOpen === member.id && (
-                                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-10">
-                                                            {member.role !== 'OWNER' && member.role !== 'MANAGER' && (
-                                                                <button
-                                                                    onClick={() => handleUpdateRole(member.id, 'MANAGER')}
-                                                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                                                >
-                                                                    <Edit className="w-4 h-4" />
-                                                                    Promover a Administrador
-                                                                </button>
-                                                            )}
-                                                            {member.role === 'MANAGER' && (
-                                                                <button
-                                                                    onClick={() => handleUpdateRole(member.id, 'AGENT')}
-                                                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                                                >
-                                                                    <Edit className="w-4 h-4" />
-                                                                    Degradar a Agente
-                                                                </button>
-                                                            )}
-                                                            {member.role !== 'OWNER' && (
-                                                                <>
-                                                                    <div className="h-px bg-gray-100 my-1"></div>
-                                                                    <button
-                                                                        onClick={() => handleRemoveMember(member.id)}
-                                                                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                        Eliminar del equipo
-                                                                    </button>
-                                                                </>
-                                                            )}
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <div className={cn(
+                                                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border",
+                                                        getRoleBadgeStyle(member.role)
+                                                    )}>
+                                                        <Shield className="w-3 h-3" />
+                                                        {getRoleLabel(member.role)}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    {isActive ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                                            <span className="text-sm text-gray-700 font-bold">Activo</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <Clock className="w-4 h-4 text-amber-500" />
+                                                            <span className="text-sm text-amber-600 font-bold">Pendiente</span>
                                                         </div>
                                                     )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <div className="flex justify-end">
+                                                        <div className="relative">
+                                                            <button 
+                                                                onClick={() => setIsActionMenuOpen(isActionMenuOpen === member.id ? null : member.id)}
+                                                                disabled={member.role === 'OWNER'}
+                                                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <MoreVertical className="w-5 h-5" />
+                                                            </button>
+                                                            
+                                                            {isActionMenuOpen === member.id && (
+                                                                <div 
+                                                                    ref={(el) => {
+                                                                        if (el) actionMenuRefs.current[member.id] = el;
+                                                                    }}
+                                                                    className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50"
+                                                                >
+                                                                    {member.role !== 'OWNER' && member.role !== 'MANAGER' && (
+                                                                        <button
+                                                                            onClick={() => handleUpdateRole(member.id, 'MANAGER')}
+                                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                        >
+                                                                            <Edit className="w-4 h-4" />
+                                                                            Promover a Administrador
+                                                                        </button>
+                                                                    )}
+                                                                    {member.role === 'MANAGER' && (
+                                                                        <button
+                                                                            onClick={() => handleUpdateRole(member.id, 'AGENT')}
+                                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                        >
+                                                                            <Edit className="w-4 h-4" />
+                                                                            Degradar a Agente
+                                                                        </button>
+                                                                    )}
+                                                                    {member.role !== 'OWNER' && (
+                                                                        <>
+                                                                            <div className="h-px bg-gray-100 my-1"></div>
+                                                                            <button
+                                                                                onClick={() => handleRemoveMember(member.id)}
+                                                                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                                Eliminar del equipo
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 ) : (
                                     <tr>
                                         <td colSpan={4} className="px-8 py-20 text-center">
@@ -246,16 +315,8 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
                 onClose={() => setIsInviteModalOpen(false)}
                 currentMemberCount={currentMemberCount}
                 maxMembers={maxMembers}
+                onSuccess={handleInviteSuccess}
             />
-
-            {/* Close action menu when clicking outside */}
-            {isActionMenuOpen && (
-                <div
-                    className="fixed inset-0 z-0"
-                    onClick={() => setIsActionMenuOpen(null)}
-                />
-            )}
         </>
     );
 }
-

@@ -10,9 +10,10 @@ interface InviteMemberModalProps {
     onClose: () => void;
     currentMemberCount: number;
     maxMembers: number;
+    onSuccess?: () => void;
 }
 
-export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMembers }: InviteMemberModalProps) {
+export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMembers, onSuccess }: InviteMemberModalProps) {
     const router = useRouter();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -63,8 +64,12 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
                 setEmail('');
                 setTimeout(() => {
                     onClose();
-                    router.refresh();
-                }, 2000);
+                    if (onSuccess) {
+                        onSuccess();
+                    } else {
+                        router.refresh();
+                    }
+                }, 1500);
             }
         } catch (err: any) {
             setError(err.message || 'Error al enviar la invitación');

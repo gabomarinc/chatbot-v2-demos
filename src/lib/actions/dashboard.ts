@@ -513,7 +513,15 @@ export async function getTeamMembers() {
     return prisma.workspaceMember.findMany({
         where: { workspaceId: workspace.id },
         include: {
-            user: true
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    createdAt: true,
+                    updatedAt: true,
+                }
+            }
         }
     })
 }
