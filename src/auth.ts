@@ -62,8 +62,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token.role = user.role
                 token.name = user.name
                 token.email = user.email
-            } else if (token.id) {
-                // Existing token - always fetch fresh user data from database
+            } else if (token.id && (!token.name || !token.email)) {
+                // Only fetch from database if name or email is missing from token
                 const dbUser = await prisma.user.findUnique({
                     where: { id: token.id as string },
                     select: { name: true, email: true, role: true }
