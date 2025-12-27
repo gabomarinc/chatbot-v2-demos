@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { InviteMemberModal } from './InviteMemberModal';
 import { removeTeamMember, updateTeamMemberRole } from '@/lib/actions/team';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { createPortal } from 'react-dom';
 
 interface TeamMember {
     id: string;
@@ -23,28 +25,46 @@ interface TeamPageClientProps {
     initialMembers: TeamMember[];
     currentMemberCount: number;
     maxMembers: number;
+    currentUserId?: string;
 }
 
-export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers }: TeamPageClientProps) {
+export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers, currentUserId }: TeamPageClientProps) {
     const router = useRouter();
+    const { data: session } = useSession();
     const [members, setMembers] = useState(initialMembers);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isActionMenuOpen, setIsActionMenuOpen] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [showTooltip, setShowTooltip] = useState(false);
     const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const inviteButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // Helper to check if user has logged in (simple heuristic: if updatedAt is significantly different from createdAt)
+    // Get current user ID from session or prop
+    const currentUser = currentUserId || session?.user?.id;
+
+    // Helper to check if user has logged in
+    // If it's the current user, always show as active
+    // Otherwise, check if updatedAt is significantly different from createdAt
     const hasLoggedIn = (member: TeamMember) => {
+        // Current user is always active
+        if (currentUser && member.user.id === currentUser) {
+            return true;
+        }
+        
+        // For other users, check if they've updated their profile after creation
+        // This is a heuristic - if updatedAt is more than 1 hour after createdAt, assume they logged in
         const createdAt = new Date(member.user.createdAt).getTime();
         const updatedAt = new Date(member.user.updatedAt).getTime();
         const diffMs = updatedAt - createdAt;
-        // If updated more than 10 minutes after creation, assume they've logged in (updatedAt gets updated on login)
-        return diffMs > 10 * 60 * 1000;
+        const oneHour = 60 * 60 * 1000;
+        
+        return diffMs > oneHour;
     };
 
     const getRoleLabel = (role: string) => {
@@ -130,16 +150,22 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
         const handleClickOutside = (event: MouseEvent) => {
             if (isActionMenuOpen) {
                 const menuElement = actionMenuRefs.current[isActionMenuOpen];
-                if (menuElement && !menuElement.contains(event.target as Node)) {
+                const buttonElement = buttonRefs.current[isActionMenuOpen];
+                if (
+                    menuElement && !menuElement.contains(event.target as Node) &&
+                    buttonElement && !buttonElement.contains(event.target as Node)
+                ) {
                     setIsActionMenuOpen(null);
                 }
             }
         };
 
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
+        if (isActionMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside);
+            };
+        }
     }, [isActionMenuOpen]);
 
     return (
@@ -159,29 +185,41 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
                             </div>
                         </div>
                     </div>
-                    <div className="relative group">
+                    <div className="relative">
                         <button 
+                            ref={inviteButtonRef}
                             onClick={() => setIsInviteModalOpen(true)}
+                            onMouseEnter={() => !canInvite && setShowTooltip(true)}
+                            onMouseLeave={() => setShowTooltip(false)}
                             disabled={!canInvite}
                             className="flex items-center gap-2 px-5 py-3 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Plus className="w-5 h-5" />
                             Invitar Colaborador
                         </button>
-                        {!canInvite && (
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                Has alcanzado el límite de miembros ({maxMembers}/{maxMembers}). Actualiza tu plan para invitar más.
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-                                    <div className="border-4 border-transparent border-t-gray-900"></div>
-                                </div>
-                            </div>
+                        {!canInvite && showTooltip && inviteButtonRef.current && mounted && (
+                            createPortal(
+                                <div 
+                                    className="fixed bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-[200] shadow-lg"
+                                    style={{
+                                        top: `${inviteButtonRef.current.getBoundingClientRect().top - 40}px`,
+                                        left: `${Math.min(inviteButtonRef.current.getBoundingClientRect().left, window.innerWidth - 300)}px`,
+                                    }}
+                                >
+                                    Has alcanzado el límite de miembros ({maxMembers}/{maxMembers}). Actualiza tu plan para invitar más.
+                                    <div className="absolute top-full left-4 -mt-1">
+                                        <div className="border-4 border-transparent border-t-gray-900"></div>
+                                    </div>
+                                </div>,
+                                document.body
+                            )
                         )}
                     </div>
                 </div>
 
                 {/* List */}
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)]">
-                    <div className="overflow-x-auto overflow-y-visible">
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)] relative">
+                    <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="border-b border-gray-50">
@@ -195,6 +233,7 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
                                 {members.length > 0 ? (
                                     members.map((member) => {
                                         const isActive = hasLoggedIn(member);
+                                        const buttonRect = buttonRefs.current[member.id]?.getBoundingClientRect();
                                         return (
                                             <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
                                                 <td className="px-8 py-6">
@@ -237,6 +276,9 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
                                                     <div className="flex justify-end">
                                                         <div className="relative">
                                                             <button 
+                                                                ref={(el) => {
+                                                                    if (el) buttonRefs.current[member.id] = el;
+                                                                }}
                                                                 onClick={() => setIsActionMenuOpen(isActionMenuOpen === member.id ? null : member.id)}
                                                                 disabled={member.role === 'OWNER'}
                                                                 className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -244,44 +286,51 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers 
                                                                 <MoreVertical className="w-5 h-5" />
                                                             </button>
                                                             
-                                                            {isActionMenuOpen === member.id && (
-                                                                <div 
-                                                                    ref={(el) => {
-                                                                        if (el) actionMenuRefs.current[member.id] = el;
-                                                                    }}
-                                                                    className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50"
-                                                                >
-                                                                    {member.role !== 'OWNER' && member.role !== 'MANAGER' && (
-                                                                        <button
-                                                                            onClick={() => handleUpdateRole(member.id, 'MANAGER')}
-                                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                                                        >
-                                                                            <Edit className="w-4 h-4" />
-                                                                            Promover a Administrador
-                                                                        </button>
-                                                                    )}
-                                                                    {member.role === 'MANAGER' && (
-                                                                        <button
-                                                                            onClick={() => handleUpdateRole(member.id, 'AGENT')}
-                                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                                                        >
-                                                                            <Edit className="w-4 h-4" />
-                                                                            Degradar a Agente
-                                                                        </button>
-                                                                    )}
-                                                                    {member.role !== 'OWNER' && (
-                                                                        <>
-                                                                            <div className="h-px bg-gray-100 my-1"></div>
+                                                            {isActionMenuOpen === member.id && mounted && buttonRect && (
+                                                                createPortal(
+                                                                    <div 
+                                                                        ref={(el) => {
+                                                                            if (el) actionMenuRefs.current[member.id] = el;
+                                                                        }}
+                                                                        className="fixed bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-[200] min-w-[192px]"
+                                                                        style={{
+                                                                            top: `${Math.min(buttonRect.bottom + 8, window.innerHeight - 150)}px`,
+                                                                            right: `${Math.max(window.innerWidth - buttonRect.right, 16)}px`,
+                                                                        }}
+                                                                    >
+                                                                        {member.role !== 'OWNER' && member.role !== 'MANAGER' && (
                                                                             <button
-                                                                                onClick={() => handleRemoveMember(member.id)}
-                                                                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                                                                onClick={() => handleUpdateRole(member.id, 'MANAGER')}
+                                                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                                                             >
-                                                                                <Trash2 className="w-4 h-4" />
-                                                                                Eliminar del equipo
+                                                                                <Edit className="w-4 h-4" />
+                                                                                Promover a Administrador
                                                                             </button>
-                                                                        </>
-                                                                    )}
-                                                                </div>
+                                                                        )}
+                                                                        {member.role === 'MANAGER' && (
+                                                                            <button
+                                                                                onClick={() => handleUpdateRole(member.id, 'AGENT')}
+                                                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                            >
+                                                                                <Edit className="w-4 h-4" />
+                                                                                Degradar a Agente
+                                                                            </button>
+                                                                        )}
+                                                                        {member.role !== 'OWNER' && (
+                                                                            <>
+                                                                                <div className="h-px bg-gray-100 my-1"></div>
+                                                                                <button
+                                                                                    onClick={() => handleRemoveMember(member.id)}
+                                                                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                                                                >
+                                                                                    <Trash2 className="w-4 h-4" />
+                                                                                    Eliminar del equipo
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>,
+                                                                    document.body
+                                                                )
                                                             )}
                                                         </div>
                                                     </div>
