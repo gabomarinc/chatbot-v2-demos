@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
-import { startOfMonth, subMonths, format, startOfWeek, endOfWeek, eachDayOfInterval, subWeeks, addWeeks } from 'date-fns'
+import { startOfMonth, subMonths, format, startOfWeek, endOfWeek, eachDayOfInterval, subWeeks, addWeeks, subDays, getDay, getHours } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { revalidatePath } from 'next/cache'
 import { cache } from 'react'
@@ -225,15 +225,60 @@ export async function getTopAgents() {
     const workspace = await getUserWorkspace()
     if (!workspace) return []
 
+    // Get last 7 days for engagement metrics
+    const sevenDaysAgo = subDays(new Date(), 7)
+
     const agents = await prisma.agent.findMany({
         where: { workspaceId: workspace.id },
         take: 3,
         include: {
             _count: {
                 select: { conversations: true }
+            },
+            conversations: {
+                where: {
+                    createdAt: { gte: sevenDaysAgo }
+                },
+                include: {
+                    channel: {
+                        select: {
+                            type: true
+                        }
+                    },
+                    messages: {
+                        select: {
+                            createdAt: true
+                        }
+                    }
+                }
             }
         }
     })
+
+    // Sort agents by conversation count and take top 3
+    const sortedAgents = agents
+        .sort((a, b) => b._count.conversations - a._count.conversations)
+        .slice(0, 3)
+
+    // Get usage logs for credits calculation
+    const usageLogs = await prisma.usageLog.findMany({
+        where: {
+            workspaceId: workspace.id,
+            agentId: { in: sortedAgents.map(a => a.id) },
+            createdAt: { gte: sevenDaysAgo }
+        },
+        select: {
+            agentId: true,
+            creditsUsed: true
+        }
+    })
+
+    // Group usage logs by agent
+    const creditsByAgent = usageLogs.reduce((acc, log) => {
+        if (!log.agentId) return acc
+        acc[log.agentId] = (acc[log.agentId] || 0) + log.creditsUsed
+        return acc
+    }, {} as Record<string, number>)
 
     const colors = [
         'from-[#21AC96] to-[#1a8a78]',
@@ -241,15 +286,80 @@ export async function getTopAgents() {
         'from-[#1a8a78] to-[#99f6e4]'
     ]
 
-    return agents.map((agent, index) => ({
-        id: agent.id,
-        name: agent.name,
-        role: 'Agente de Ventas', // This could be dynamic based on job
-        conversations: agent._count.conversations,
-        performance: 90 + Math.floor(Math.random() * 10), // Simulated performance stats
-        status: 'active',
-        color: colors[index % colors.length]
-    }))
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+    return sortedAgents.map((agent, index) => {
+        const recentConversations = agent.conversations
+        
+        // Calculate active hours (unique hours with activity in last 7 days)
+        const activeHoursSet = new Set<number>()
+        recentConversations.forEach(conv => {
+            conv.messages.forEach(msg => {
+                const hour = getHours(new Date(msg.createdAt))
+                activeHoursSet.add(hour)
+            })
+            // Also count conversation creation hour
+            const convHour = getHours(new Date(conv.createdAt))
+            activeHoursSet.add(convHour)
+        })
+        const activeHours = activeHoursSet.size
+
+        // Calculate peak day
+        const dayCounts: Record<number, number> = {}
+        recentConversations.forEach(conv => {
+            const day = getDay(new Date(conv.createdAt))
+            dayCounts[day] = (dayCounts[day] || 0) + 1
+        })
+        const peakDayIndex = Object.entries(dayCounts)
+            .sort(([, a], [, b]) => b - a)[0]?.[0]
+        const peakDay = peakDayIndex ? dayNames[parseInt(peakDayIndex)] : null
+
+        // Calculate peak hour
+        const hourCounts: Record<number, number> = {}
+        recentConversations.forEach(conv => {
+            conv.messages.forEach(msg => {
+                const hour = getHours(new Date(msg.createdAt))
+                hourCounts[hour] = (hourCounts[hour] || 0) + 1
+            })
+            const convHour = getHours(new Date(conv.createdAt))
+            hourCounts[convHour] = (hourCounts[convHour] || 0) + 1
+        })
+        const peakHourEntry = Object.entries(hourCounts)
+            .sort(([, a], [, b]) => b - a)[0]
+        const peakHour = peakHourEntry 
+            ? `${peakHourEntry[0]}:00-${parseInt(peakHourEntry[0]) + 1}:00`
+            : null
+
+        // Calculate channel distribution
+        const channelCounts: Record<string, number> = {}
+        recentConversations.forEach(conv => {
+            const channelType = conv.channel?.type || 'WEBCHAT'
+            channelCounts[channelType] = (channelCounts[channelType] || 0) + 1
+        })
+        const totalChannels = recentConversations.length
+        const channelDistribution = Object.entries(channelCounts)
+            .map(([type, count]) => ({
+                type,
+                count,
+                percentage: totalChannels > 0 ? Math.round((count / totalChannels) * 100) : 0
+            }))
+            .sort((a, b) => b.count - a.count)
+
+        return {
+            id: agent.id,
+            name: agent.name,
+            role: 'Agente de Ventas',
+            conversations: agent._count.conversations,
+            creditsUsed: creditsByAgent[agent.id] || 0,
+            status: 'active',
+            color: colors[index % colors.length],
+            // Engagement metrics
+            activeHours,
+            peakDay: peakDay || 'N/A',
+            peakHour: peakHour || 'N/A',
+            channelDistribution
+        }
+    })
 }
 
 // Helper to get agent details (Selective fetching for speed)

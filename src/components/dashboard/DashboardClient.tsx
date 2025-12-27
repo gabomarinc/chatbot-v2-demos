@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, Filter, ChevronDown, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare } from 'lucide-react';
+import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, Filter, ChevronDown, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -341,18 +341,100 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                 </div>
 
                 {topAgents.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {topAgents.map((agent, index) => (
-                            <div key={index} className="flex items-center gap-5 p-4 rounded-3xl hover:bg-gray-50/50 transition-colors border border-transparent hover:border-gray-100 group">
-                                <div className={`w-14 h-14 bg-gradient-to-br ${agent.color} rounded-2xl flex items-center justify-center text-2xl shadow-lg relative group-hover:rotate-6 transition-transform`}>
-                                    {agent.avatar}
-                                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center text-[10px] font-bold text-gray-900 shadow-sm border border-gray-100">
-                                        #{index + 1}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {topAgents.map((agent: any, index) => (
+                            <div key={agent.id || index} className="bg-gradient-to-br from-white to-gray-50/50 rounded-3xl p-6 border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all group">
+                                {/* Header with Avatar and Rank */}
+                                <div className="flex items-start justify-between mb-5">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-14 h-14 bg-gradient-to-br ${agent.color} rounded-2xl flex items-center justify-center text-2xl font-bold text-white shadow-lg relative group-hover:rotate-6 transition-transform`}>
+                                            {agent.name.charAt(0).toUpperCase()}
+                                            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center text-[10px] font-bold text-gray-900 shadow-sm border border-gray-100">
+                                                #{index + 1}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-base text-gray-900 font-extrabold tracking-tight">{agent.name}</h4>
+                                            <p className="text-xs text-gray-400 font-medium">{agent.role || 'Agente'}</p>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-base text-gray-900 font-extrabold tracking-tight">{agent.name}</span>
-                                    <span className="text-sm text-[#21AC96] font-bold">{agent.credits} <span className="text-xs font-medium text-gray-400 opacity-70">pts generados</span></span>
+
+                                {/* Main Metric */}
+                                <div className="mb-5">
+                                    <div className="flex items-baseline gap-2 mb-1">
+                                        <span className="text-2xl font-extrabold text-gray-900">{agent.conversations}</span>
+                                        <span className="text-sm font-bold text-gray-400">conversaciones</span>
+                                    </div>
+                                    {agent.creditsUsed > 0 && (
+                                        <div className="flex items-center gap-1.5 text-sm">
+                                            <Coins className="w-3.5 h-3.5 text-[#21AC96]" />
+                                            <span className="font-bold text-[#21AC96]">{agent.creditsUsed}</span>
+                                            <span className="text-xs text-gray-400">créditos usados</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Engagement Metrics */}
+                                <div className="space-y-3 pt-4 border-t border-gray-100">
+                                    {/* Active Hours */}
+                                    {agent.activeHours !== undefined && (
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                                <Clock className="w-4 h-4 text-blue-600" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-gray-400 font-medium">Horas activas</p>
+                                                <p className="text-sm font-bold text-gray-900">{agent.activeHours}h esta semana</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Peak Day and Hour */}
+                                    {(agent.peakDay || agent.peakHour) && (
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                                <TrendingUpIcon className="w-4 h-4 text-purple-600" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-gray-400 font-medium">Pico de actividad</p>
+                                                <p className="text-sm font-bold text-gray-900">
+                                                    {agent.peakDay !== 'N/A' && agent.peakDay}
+                                                    {agent.peakDay !== 'N/A' && agent.peakHour !== 'N/A' && ' • '}
+                                                    {agent.peakHour !== 'N/A' && agent.peakHour}
+                                                    {agent.peakDay === 'N/A' && agent.peakHour === 'N/A' && 'Sin datos'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Channel Distribution */}
+                                    {agent.channelDistribution && agent.channelDistribution.length > 0 && (
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
+                                                <Smartphone className="w-4 h-4 text-green-600" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-gray-400 font-medium mb-1.5">Canales principales</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {agent.channelDistribution.slice(0, 3).map((channel: any, idx: number) => {
+                                                        const channelNames: Record<string, string> = {
+                                                            WHATSAPP: 'WhatsApp',
+                                                            INSTAGRAM: 'Instagram',
+                                                            MESSENGER: 'Messenger',
+                                                            WEBCHAT: 'Web'
+                                                        }
+                                                        return (
+                                                            <div key={idx} className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg">
+                                                                <span className="text-xs font-bold text-gray-700">{channelNames[channel.type] || channel.type}</span>
+                                                                <span className="text-xs font-bold text-[#21AC96]">{channel.percentage}%</span>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
