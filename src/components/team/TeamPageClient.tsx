@@ -40,6 +40,8 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers,
     const [members, setMembers] = useState(initialMembers);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isMaxMembersModalOpen, setIsMaxMembersModalOpen] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [memberToDelete, setMemberToDelete] = useState<{ id: string; name: string } | null>(null);
     const [isActionMenuOpen, setIsActionMenuOpen] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [mounted, setMounted] = useState(false);
