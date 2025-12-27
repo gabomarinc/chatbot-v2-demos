@@ -57,7 +57,7 @@ export async function canAssumeConversations(): Promise<boolean> {
 }
 
 // Invite team member
-export async function inviteTeamMember(email: string, role: 'MANAGER' | 'AGENT') {
+export async function inviteTeamMember(name: string, email: string, role: 'MANAGER' | 'AGENT') {
     try {
         const session = await auth()
         if (!session?.user?.id) {
@@ -116,12 +116,21 @@ export async function inviteTeamMember(email: string, role: 'MANAGER' | 'AGENT')
 
             user = await prisma.user.create({
                 data: {
+                    name: name.trim(),
                     email: email.toLowerCase().trim(),
                     passwordHash: hashedPassword,
                     // User will need to set password on first login
                 }
             })
             isNewUser = true
+        } else {
+            // Update existing user's name if provided and different
+            if (name.trim() && user.name !== name.trim()) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { name: name.trim() }
+                })
+            }
         }
 
         // Check if user is already a member

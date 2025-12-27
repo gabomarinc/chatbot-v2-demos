@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react';
-import { X, Mail, User, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { X, Mail, User as UserIcon, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { inviteTeamMember } from '@/lib/actions/team';
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,7 @@ interface InviteMemberModalProps {
 
 export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMembers }: InviteMemberModalProps) {
     const router = useRouter();
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<'MANAGER' | 'AGENT'>('AGENT');
     const [isLoading, setIsLoading] = useState(false);
@@ -26,6 +27,11 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
         e.preventDefault();
         setError(null);
         setSuccess(false);
+
+        if (!name.trim()) {
+            setError('El nombre es requerido');
+            return;
+        }
 
         if (!email.trim()) {
             setError('El email es requerido');
@@ -47,12 +53,13 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
 
         setIsLoading(true);
         try {
-            const result = await inviteTeamMember(email.trim().toLowerCase(), role);
+            const result = await inviteTeamMember(name.trim(), email.trim().toLowerCase(), role);
             
             if (result.error) {
                 setError(result.error);
             } else {
                 setSuccess(true);
+                setName('');
                 setEmail('');
                 setTimeout(() => {
                     onClose();
@@ -68,6 +75,7 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
 
     const handleClose = () => {
         if (!isLoading) {
+            setName('');
             setEmail('');
             setRole('AGENT');
             setError(null);
@@ -102,6 +110,22 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
 
                 {/* Content */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    {/* Name Input */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                            <UserIcon className="w-4 h-4 text-gray-400" />
+                            Nombre del colaborador
+                        </label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Juan Pérez"
+                            disabled={isLoading || remainingSlots === 0}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#21AC96] focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                    </div>
+
                     {/* Email Input */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
@@ -127,7 +151,7 @@ export function InviteMemberModal({ isOpen, onClose, currentMemberCount, maxMemb
                     {/* Role Selection */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400" />
+                            <UserIcon className="w-4 h-4 text-gray-400" />
                             Rol
                         </label>
                         <div className="grid grid-cols-2 gap-3">

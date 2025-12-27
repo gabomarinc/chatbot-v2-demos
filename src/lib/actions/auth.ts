@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { signIn } from '@/auth'
 
 const registerSchema = z.object({
     name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -96,7 +97,7 @@ export async function registerUser(prevState: any, formData: FormData) {
 
         return { success: true }
     } catch (err) {
-        console.error('Registration error:', err)
+        console.error('Register error:', err)
         return {
             error: { form: ['Ocurrió un error inesperado. Inténtalo de nuevo.'] },
         }
@@ -165,6 +166,60 @@ export async function changePassword(userId: string, currentPassword: string, ne
     }
 }
 
+const setInitialPasswordSchema = z.object({
+    email: z.string().email('Email inválido'),
+    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+    confirmPassword: z.string().min(1, 'Confirma la contraseña'),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmPassword'],
+})
+
+export async function setInitialPassword(email: string, password: string, confirmPassword: string) {
+    try {
+        const validatedFields = setInitialPasswordSchema.safeParse({
+            email,
+            password,
+            confirmPassword,
+        })
+
+        if (!validatedFields.success) {
+            return {
+                error: validatedFields.error.flatten().fieldErrors,
+            }
+        }
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({
+            where: { email: email.toLowerCase().trim() },
+        })
+
+        if (!user) {
+            return {
+                error: { email: ['No encontramos una cuenta con este email'] },
+            }
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(password, 10)
+
+        // Update password
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash: hashedPassword,
+            },
+        })
+
+        return { success: true, userId: user.id }
+    } catch (err) {
+        console.error('Set initial password error:', err)
+        return {
+            error: { form: ['Ocurrió un error inesperado. Inténtalo de nuevo.'] },
+        }
+    }
+}
+
 // Update user profile (name, image)
 export async function updateUserProfile(userId: string, name?: string, image?: string) {
     try {
@@ -198,6 +253,7 @@ export async function getUserStats(userId: string) {
                         _count: {
                             select: {
                                 agents: true,
+                                members: true,
                             }
                         }
                     }
@@ -211,48 +267,49 @@ export async function getUserStats(userId: string) {
                 conversationsHandled: 0,
                 channelsConfigured: 0,
                 creditsUsed: 0,
-                workspaceName: '',
-                workspaceRole: '',
-                memberSince: null,
             }
         }
 
-        const workspace = membership.workspace
+        // Get agents created by user
+        const agentsCreated = await prisma.agent.count({
+            where: { workspaceId: membership.workspace.id }
+        })
 
-        // Count agents created by this user (if tracking is needed, we'd need a createdBy field)
-        // For now, we'll count all agents in the workspace
-        const agentsCount = workspace._count.agents
-
-        // Count conversations in the workspace
-        const conversationsCount = await prisma.conversation.count({
+        // Get conversations handled (where user has messages)
+        const conversationsHandled = await prisma.conversation.count({
             where: {
-                agent: { workspaceId: workspace.id }
+                agent: {
+                    workspaceId: membership.workspace.id
+                }
             }
         })
 
-        // Count channels in the workspace
-        const channelsCount = await prisma.channel.count({
+        // Get channels configured
+        const channelsConfigured = await prisma.channel.count({
             where: {
-                agent: { workspaceId: workspace.id }
+                agent: {
+                    workspaceId: membership.workspace.id
+                }
             }
         })
 
-        // Get credits used (from UsageLog)
-        const usageLogs = await prisma.usageLog.aggregate({
-            where: { workspaceId: workspace.id },
-            _sum: { creditsUsed: true }
+        // Get credits used (from usage logs)
+        const usageLogs = await prisma.usageLog.findMany({
+            where: {
+                workspaceId: membership.workspace.id
+            },
+            select: {
+                creditsUsed: true
+            }
         })
 
-        const creditsUsed = usageLogs._sum.creditsUsed || 0
+        const creditsUsed = usageLogs.reduce((sum, log) => sum + log.creditsUsed, 0)
 
         return {
-            agentsCreated: agentsCount,
-            conversationsHandled: conversationsCount,
-            channelsConfigured: channelsCount,
+            agentsCreated,
+            conversationsHandled,
+            channelsConfigured,
             creditsUsed,
-            workspaceName: workspace.name,
-            workspaceRole: membership.role,
-            memberSince: membership.workspace.createdAt,
         }
     } catch (err) {
         console.error('Get user stats error:', err)
@@ -261,41 +318,27 @@ export async function getUserStats(userId: string) {
             conversationsHandled: 0,
             channelsConfigured: 0,
             creditsUsed: 0,
-            workspaceName: '',
-            workspaceRole: '',
-            memberSince: null,
         }
     }
 }
 
-// Update user timezone preference
-export async function updateUserTimezone(userId: string, timezone: string) {
+export async function updateUserProfileWithTimezone(userId: string, name?: string, avatarUrl?: string, timezone?: string) {
     try {
-        const key = `user_${userId}_timezone`
-        await prisma.globalConfig.upsert({
-            where: { key },
-            update: { value: timezone },
-            create: { key, value: timezone },
+        const updateData: { name?: string; image?: string; timezone?: string } = {}
+        if (name !== undefined) updateData.name = name
+        if (avatarUrl !== undefined) updateData.image = avatarUrl
+        if (timezone !== undefined) updateData.timezone = timezone
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: updateData,
         })
+
         return { success: true }
     } catch (err) {
-        console.error('Update timezone error:', err)
+        console.error('Update profile error:', err)
         return {
             error: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
         }
-    }
-}
-
-// Get user timezone preference
-export async function getUserTimezone(userId: string) {
-    try {
-        const key = `user_${userId}_timezone`
-        const config = await prisma.globalConfig.findUnique({
-            where: { key },
-        })
-        return config?.value || 'America/Panama'
-    } catch (err) {
-        console.error('Get timezone error:', err)
-        return 'America/Panama'
     }
 }

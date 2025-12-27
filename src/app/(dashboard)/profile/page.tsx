@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { getUserStats, getUserTimezone } from '@/lib/actions/auth';
 import ProfileClient from './ProfileClient';
 
 export default async function ProfilePage() {
@@ -28,18 +27,67 @@ export default async function ProfilePage() {
         redirect('/login');
     }
 
-    // Get user statistics and preferences
-    const [stats, timezone] = await Promise.all([
-        getUserStats(session.user.id),
-        getUserTimezone(session.user.id),
-    ]);
+    // Get user's workspace membership
+    const membership = await prisma.workspaceMember.findFirst({
+        where: { userId: session.user.id },
+        include: {
+            workspace: {
+                select: {
+                    name: true,
+                    createdAt: true,
+                }
+            }
+        }
+    });
+
+    // Get statistics
+    const agentsCreated = await prisma.agent.count({
+        where: { workspaceId: membership?.workspaceId || '' }
+    });
+
+    const conversationsHandled = await prisma.conversation.count({
+        where: {
+            agent: {
+                workspaceId: membership?.workspaceId || ''
+            }
+        }
+    });
+
+    const channelsConfigured = await prisma.channel.count({
+        where: {
+            agent: {
+                workspaceId: membership?.workspaceId || ''
+            }
+        }
+    });
+
+    const usageLogs = await prisma.usageLog.findMany({
+        where: { workspaceId: membership?.workspaceId || '' },
+        select: { creditsUsed: true }
+    });
+
+    const creditsUsed = usageLogs.reduce((sum, log) => sum + log.creditsUsed, 0);
 
     return (
         <ProfileClient
-            user={user}
-            stats={stats}
-            initialTimezone={timezone}
+            user={{
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                createdAt: user.createdAt,
+                role: user.role,
+            }}
+            stats={{
+                agentsCreated,
+                conversationsHandled,
+                channelsConfigured,
+                creditsUsed,
+                workspaceName: membership?.workspace.name || 'N/A',
+                workspaceRole: membership?.role || 'AGENT',
+                memberSince: membership?.workspace.createdAt || null,
+            }}
+            initialTimezone="UTC"
         />
     );
 }
-

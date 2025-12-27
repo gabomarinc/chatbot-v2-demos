@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Save, User, Mail, Calendar, TrendingUp, Bot, Radio, MessageSquare, Coins, AlertCircle, CheckCircle, Upload } from 'lucide-react';
-import { updateUserProfile, updateUserTimezone } from '@/lib/actions/auth';
+import { updateUserProfileWithTimezone } from '@/lib/actions/auth';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -48,21 +48,11 @@ export default function ProfileClient({ user, stats, initialTimezone }: ProfileC
         setErrorMessage(null);
 
         try {
-            const result = await updateUserProfile(user.id, name, avatarPreview || undefined);
+            const result = await updateUserProfileWithTimezone(user.id, name, avatarPreview || undefined, timezone);
             
             if (result.error) {
                 setErrorMessage(result.error);
             } else {
-                // Update timezone if changed
-                if (timezone !== initialTimezone) {
-                    const timezoneResult = await updateUserTimezone(user.id, timezone);
-                    if (timezoneResult.error) {
-                        setErrorMessage(timezoneResult.error);
-                        setIsSaving(false);
-                        return;
-                    }
-                }
-
                 setSuccessMessage('Perfil actualizado exitosamente');
                 // Update session to reflect name changes
                 await updateSession();
