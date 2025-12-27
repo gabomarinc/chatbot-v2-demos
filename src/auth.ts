@@ -83,8 +83,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (token.name !== undefined) {
                     session.user.name = token.name || null
                 }
-                if (token.email !== undefined) {
-                    session.user.email = token.email || null
+                if (token.email !== undefined && token.email) {
+                    session.user.email = token.email
                 }
             }
             return session
