@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { getDashboardStats, getCreditsDetails, getNotifications, getNotificationCount } from '@/lib/actions/dashboard';
 import { CreditsDetailsModal } from '@/components/dashboard/CreditsDetailsModal';
 import { NotificationsDropdown } from './NotificationsDropdown';
+import { SearchDropdown } from './SearchDropdown';
+import { globalSearch } from '@/lib/actions/search';
 
 export function Topbar() {
     const { data: session } = useSession();
@@ -27,6 +29,18 @@ export function Topbar() {
     const [notificationCount, setNotificationCount] = useState(0);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
     const notificationsRef = useRef<HTMLDivElement>(null);
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<{
+        agents: any[];
+        conversations: any[];
+        prospects: any[];
+    }>({ agents: [], conversations: [], prospects: [] });
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const searchRef = useRef<HTMLDivElement>(null);
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const userInitial = session?.user?.name ? session.user.name.charAt(0).toUpperCase() : 'U';
     const userName = session?.user?.name || 'Usuario';
@@ -73,10 +87,47 @@ export function Topbar() {
         fetchNotifications();
     }, [isNotificationsOpen]);
 
+    // Search functionality with debounce
+    useEffect(() => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        if (searchQuery.trim().length >= 2) {
+            setIsSearching(true);
+            setIsSearchOpen(true);
+            
+            searchTimeoutRef.current = setTimeout(async () => {
+                try {
+                    const results = await globalSearch(searchQuery);
+                    setSearchResults(results);
+                } catch (error) {
+                    console.error('Error searching:', error);
+                    setSearchResults({ agents: [], conversations: [], prospects: [] });
+                } finally {
+                    setIsSearching(false);
+                }
+        }, 300);
+        } else {
+            setIsSearchOpen(false);
+            setSearchResults({ agents: [], conversations: [], prospects: [] });
+            setIsSearching(false);
+        }
+
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, [searchQuery]);
+
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setIsUserMenuOpen(false);
+            }
+            if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+                setIsSearchOpen(false);
             }
         }
         document.addEventListener('mousedown', handleClickOutside);
@@ -99,12 +150,26 @@ export function Topbar() {
                     <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-[#21AC96] group-hover:rotate-180 transition-all duration-300" />
                 </button>
 
-                <div className="relative group">
+                <div className="relative group" ref={searchRef}>
                     <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#21AC96] group-focus-within:scale-110 transition-all duration-300" />
                     <input
                         type="text"
-                        placeholder="Busca agentes por nombre..."
+                        placeholder="Busca agentes, conversaciones, prospectos..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => {
+                            if (searchQuery.trim().length >= 2) {
+                                setIsSearchOpen(true);
+                            }
+                        }}
                         className="w-96 pl-12 pr-4 py-2.5 bg-gray-50/50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-[#21AC96]/5 focus:border-[#21AC96] focus:bg-white transition-all duration-300 placeholder:text-gray-400"
+                    />
+                    <SearchDropdown
+                        isOpen={isSearchOpen}
+                        query={searchQuery}
+                        results={searchResults}
+                        isLoading={isSearching}
+                        onClose={() => setIsSearchOpen(false)}
                     />
                 </div>
             </div>
