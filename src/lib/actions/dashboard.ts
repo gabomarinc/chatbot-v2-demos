@@ -960,3 +960,245 @@ export async function getResponseRateDetails() {
         weeklyData
     }
 }
+
+// Get notification count (lightweight check)
+export async function getNotificationCount() {
+    const workspace = await getUserWorkspace()
+    if (!workspace) return 0
+
+    let count = 0
+
+    // Check for low credits
+    const creditBalance = await prisma.creditBalance.findUnique({
+        where: { workspaceId: workspace.id }
+    })
+
+    if (creditBalance) {
+        const subscription = await prisma.subscription.findUnique({
+            where: { workspaceId: workspace.id },
+            include: { plan: true }
+        })
+
+        if (subscription?.plan) {
+            const creditsPerMonth = subscription.plan.creditsPerMonth
+            const percentage = creditsPerMonth > 0 ? (creditBalance.balance / creditsPerMonth) * 100 : 0
+            
+            if (creditBalance.balance < 100 || percentage < 10) {
+                count++
+            }
+        }
+    }
+
+    // Check for conversations without response
+    const oneDayAgo = subDays(new Date(), 1)
+    const unansweredCount = await prisma.conversation.count({
+        where: {
+            agent: { workspaceId: workspace.id },
+            createdAt: { gte: oneDayAgo },
+            messages: {
+                some: { role: 'USER' }
+            },
+            NOT: {
+                messages: {
+                    some: { role: 'AGENT' }
+                }
+            }
+        }
+    })
+
+    if (unansweredCount > 0) {
+        count++
+    }
+
+    // Check for new conversations (last 2 hours)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const newConversationsCount = await prisma.conversation.count({
+        where: {
+            agent: { workspaceId: workspace.id },
+            createdAt: { gte: twoHoursAgo }
+        }
+    })
+
+    if (newConversationsCount > 0) {
+        count++
+    }
+
+    // Check for inactive channels
+    const agents = await prisma.agent.findMany({
+        where: { workspaceId: workspace.id },
+        include: {
+            channels: true
+        }
+    })
+
+    const inactiveChannels = agents.flatMap(agent => 
+        agent.channels.filter(channel => !channel.isActive)
+    )
+
+    if (inactiveChannels.length > 0) {
+        count++
+    }
+
+    return count
+}
+
+// Get notifications for the user
+export async function getNotifications() {
+    const workspace = await getUserWorkspace()
+    if (!workspace) return []
+
+    const notifications: Array<{
+        id: string;
+        type: 'warning' | 'info' | 'error' | 'success';
+        title: string;
+        message: string;
+        actionUrl?: string;
+        actionLabel?: string;
+        createdAt: Date;
+    }> = []
+
+    // Check for low credits (less than 10% or less than 100)
+    const creditBalance = await prisma.creditBalance.findUnique({
+        where: { workspaceId: workspace.id }
+    })
+
+    if (creditBalance) {
+        const subscription = await prisma.subscription.findUnique({
+            where: { workspaceId: workspace.id },
+            include: { plan: true }
+        })
+
+        if (subscription?.plan) {
+            const creditsPerMonth = subscription.plan.creditsPerMonth
+            const percentage = creditsPerMonth > 0 ? (creditBalance.balance / creditsPerMonth) * 100 : 0
+            
+            if (creditBalance.balance < 100 || percentage < 10) {
+                notifications.push({
+                    id: `low-credits-${workspace.id}`,
+                    type: creditBalance.balance < 50 ? 'error' : 'warning',
+                    title: 'Créditos bajos',
+                    message: creditBalance.balance < 50 
+                        ? `Quedan solo ${creditBalance.balance} créditos. Recarga ahora para evitar interrupciones.`
+                        : `Tienes ${creditBalance.balance} créditos disponibles. Considera recargar pronto.`,
+                    actionUrl: '/billing',
+                    actionLabel: 'Ver créditos',
+                    createdAt: new Date()
+                })
+            }
+        }
+    }
+
+    // Check for new conversations (last 2 hours)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const newConversations = await prisma.conversation.findMany({
+        where: {
+            agent: { workspaceId: workspace.id },
+            createdAt: { gte: twoHoursAgo }
+        },
+        include: {
+            agent: {
+                select: { name: true }
+            },
+            channel: {
+                select: { type: true, displayName: true }
+            }
+        },
+        orderBy: {
+            createdAt: 'desc'
+        },
+        take: 10
+    })
+
+    if (newConversations.length > 0) {
+        // Group by channel type for better display
+        const channelTypeNames: Record<string, string> = {
+            'WEBCHAT': 'Web Chat',
+            'WHATSAPP': 'WhatsApp',
+            'INSTAGRAM': 'Instagram',
+            'MESSENGER': 'Messenger'
+        }
+
+        const channelTypes = newConversations
+            .map(c => c.channel?.type || 'UNKNOWN')
+            .reduce((acc, type) => {
+                acc[type] = (acc[type] || 0) + 1
+                return acc
+            }, {} as Record<string, number>)
+
+        const channelSummary = Object.entries(channelTypes)
+            .map(([type, count]) => `${count} en ${channelTypeNames[type] || type}`)
+            .join(', ')
+
+        notifications.push({
+            id: `new-conversations-${Date.now()}`,
+            type: 'info',
+            title: `${newConversations.length} conversación${newConversations.length > 1 ? 'es' : ''} nueva${newConversations.length > 1 ? 's' : ''}`,
+            message: `Se ${newConversations.length > 1 ? 'han iniciado' : 'ha iniciado'} ${newConversations.length} conversación${newConversations.length > 1 ? 'es' : ''} nueva${newConversations.length > 1 ? 's' : ''} (${channelSummary}).`,
+            actionUrl: '/chat',
+            actionLabel: 'Ver conversaciones',
+            createdAt: new Date(Math.max(...newConversations.map(c => c.createdAt.getTime())))
+        })
+    }
+
+    // Check for conversations without response (last 24 hours)
+    const oneDayAgo = subDays(new Date(), 1)
+    const conversationsWithoutResponse = await prisma.conversation.findMany({
+        where: {
+            agent: { workspaceId: workspace.id },
+            createdAt: { gte: oneDayAgo },
+            messages: {
+                some: { role: 'USER' }
+            },
+            NOT: {
+                messages: {
+                    some: { role: 'AGENT' }
+                }
+            }
+        },
+        include: {
+            agent: {
+                select: { name: true }
+            }
+        },
+        take: 10
+    })
+
+    if (conversationsWithoutResponse.length > 0) {
+        notifications.push({
+            id: `unanswered-conversations-${Date.now()}`,
+            type: 'warning',
+            title: `${conversationsWithoutResponse.length} conversación${conversationsWithoutResponse.length > 1 ? 'es' : ''} sin respuesta`,
+            message: `Hay ${conversationsWithoutResponse.length} conversación${conversationsWithoutResponse.length > 1 ? 'es' : ''} que requieren atención.`,
+            actionUrl: '/chat',
+            actionLabel: 'Ver conversaciones',
+            createdAt: new Date()
+        })
+    }
+
+    // Check for inactive channels
+    const agents = await prisma.agent.findMany({
+        where: { workspaceId: workspace.id },
+        include: {
+            channels: true
+        }
+    })
+
+    const inactiveChannels = agents.flatMap(agent => 
+        agent.channels.filter(channel => !channel.isActive)
+    )
+
+    if (inactiveChannels.length > 0) {
+        notifications.push({
+            id: `inactive-channels-${Date.now()}`,
+            type: 'info',
+            title: `${inactiveChannels.length} canal${inactiveChannels.length > 1 ? 'es' : ''} desconectado${inactiveChannels.length > 1 ? 's' : ''}`,
+            message: `Tienes ${inactiveChannels.length} canal${inactiveChannels.length > 1 ? 'es' : ''} inactivo${inactiveChannels.length > 1 ? 's' : ''}. Actívalos para recibir mensajes.`,
+            actionUrl: '/channels',
+            actionLabel: 'Ver canales',
+            createdAt: new Date()
+        })
+    }
+
+    // Sort by date (most recent first)
+    return notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}

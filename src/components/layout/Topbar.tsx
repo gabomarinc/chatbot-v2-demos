@@ -6,8 +6,9 @@ import Link from 'next/link';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
-import { getDashboardStats, getCreditsDetails } from '@/lib/actions/dashboard';
+import { getDashboardStats, getCreditsDetails, getNotifications, getNotificationCount } from '@/lib/actions/dashboard';
 import { CreditsDetailsModal } from '@/components/dashboard/CreditsDetailsModal';
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 export function Topbar() {
     const { data: session } = useSession();
@@ -19,6 +20,13 @@ export function Topbar() {
     const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
     const [creditsData, setCreditsData] = useState<any>(null);
     const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+    
+    // Notifications state
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [notificationCount, setNotificationCount] = useState(0);
+    const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+    const notificationsRef = useRef<HTMLDivElement>(null);
 
     const userInitial = session?.user?.name ? session.user.name.charAt(0).toUpperCase() : 'U';
     const userName = session?.user?.name || 'Usuario';
@@ -30,6 +38,40 @@ export function Topbar() {
         };
         fetchCredits();
     }, []);
+
+    useEffect(() => {
+        const fetchNotificationCount = async () => {
+            try {
+                const count = await getNotificationCount();
+                setNotificationCount(count);
+            } catch (error) {
+                console.error('Error loading notification count:', error);
+            }
+        };
+        fetchNotificationCount();
+        // Refresh notification count every 30 seconds
+        const interval = setInterval(fetchNotificationCount, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            if (isNotificationsOpen) {
+                setIsLoadingNotifications(true);
+                try {
+                    const notifs = await getNotifications();
+                    setNotifications(notifs);
+                    setNotificationCount(notifs.length);
+                } catch (error) {
+                    console.error('Error loading notifications:', error);
+                    setNotifications([]);
+                } finally {
+                    setIsLoadingNotifications(false);
+                }
+            }
+        };
+        fetchNotifications();
+    }, [isNotificationsOpen]);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -97,10 +139,23 @@ export function Topbar() {
                 </div>
 
                 {/* Notifications */}
-                <button className="relative p-3 bg-gray-50/50 hover:bg-white hover:shadow-md border border-transparent hover:border-gray-100 rounded-2xl transition-all duration-300 cursor-pointer group active:scale-90">
-                    <Bell className="w-5 h-5 text-gray-500 group-hover:text-[#21AC96] group-hover:scale-110 transition-all duration-300" />
-                    <span className="absolute top-3 right-3 w-2 h-2 bg-[#21AC96] rounded-full ring-2 ring-white animate-pulse"></span>
-                </button>
+                <div className="relative" ref={notificationsRef}>
+                    <button 
+                        onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                        className="relative p-3 bg-gray-50/50 hover:bg-white hover:shadow-md border border-transparent hover:border-gray-100 rounded-2xl transition-all duration-300 cursor-pointer group active:scale-90"
+                    >
+                        <Bell className="w-5 h-5 text-gray-500 group-hover:text-[#21AC96] group-hover:scale-110 transition-all duration-300" />
+                        {notificationCount > 0 && (
+                            <span className="absolute top-3 right-3 w-2 h-2 bg-[#21AC96] rounded-full ring-2 ring-white animate-pulse"></span>
+                        )}
+                    </button>
+                    <NotificationsDropdown
+                        isOpen={isNotificationsOpen}
+                        onClose={() => setIsNotificationsOpen(false)}
+                        notifications={notifications}
+                        isLoading={isLoadingNotifications}
+                    />
+                </div>
 
                 <div className="h-8 w-[1px] bg-gray-100"></div>
 
