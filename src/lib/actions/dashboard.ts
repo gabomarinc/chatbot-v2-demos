@@ -683,9 +683,17 @@ export async function getCreditsDetails() {
 
     if (!creditBalance) return null
 
-    // Get subscription info
+    // Get subscription info with plan details
     const subscription = await prisma.subscription.findUnique({
-        where: { workspaceId: workspace.id }
+        where: { workspaceId: workspace.id },
+        include: {
+            plan: {
+                select: {
+                    name: true,
+                    type: true
+                }
+            }
+        }
     })
 
     // Get usage logs for last 30 days
@@ -782,7 +790,8 @@ export async function getCreditsDetails() {
         totalUsed: creditBalance.totalUsed,
         lastResetAt: creditBalance.lastResetAt,
         subscription: subscription ? {
-            planId: subscription.planId,
+            planName: subscription.plan.name,
+            planType: subscription.plan.type,
             status: subscription.status,
             currentPeriodEnd: subscription.currentPeriodEnd
         } : null,

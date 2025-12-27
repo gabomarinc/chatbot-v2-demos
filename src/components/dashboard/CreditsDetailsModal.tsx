@@ -43,13 +43,6 @@ export function CreditsDetailsModal({ isOpen, onClose, creditsData, isLoading = 
         );
     }
 
-    const planNames: Record<string, string> = {
-        FRESHIE: 'Freshie',
-        MONEY_HONEY: 'Money Honey',
-        WOLF_OF_WALLSTREET: 'Wolf of Wall Street',
-        CUSTOM: 'Personalizado'
-    };
-
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
@@ -124,7 +117,7 @@ export function CreditsDetailsModal({ isOpen, onClose, creditsData, isLoading = 
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-bold text-gray-600 mb-1">Plan de Suscripción</p>
-                                    <p className="text-lg font-extrabold text-gray-900">{creditsData.subscription.planId}</p>
+                                    <p className="text-lg font-extrabold text-gray-900">{creditsData.subscription.planName || creditsData.subscription.planType}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-gray-600 mb-1">Próxima Renovación</p>
