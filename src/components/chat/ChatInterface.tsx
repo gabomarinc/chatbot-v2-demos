@@ -28,11 +28,12 @@ interface Conversation {
 
 interface ChatInterfaceProps {
     initialConversations: Conversation[];
+    initialConversationId?: string;
 }
 
-export function ChatInterface({ initialConversations }: ChatInterfaceProps) {
+export function ChatInterface({ initialConversations, initialConversationId }: ChatInterfaceProps) {
     const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
-    const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+    const [selectedConvId, setSelectedConvId] = useState<string | null>(initialConversationId || null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [newMessage, setNewMessage] = useState('');

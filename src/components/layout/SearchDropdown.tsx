@@ -72,7 +72,7 @@ export function SearchDropdown({ isOpen, query, results, isLoading = false, onCl
                 router.push(`/agents/${result.id}/profile`);
                 break;
             case 'conversation':
-                router.push(`/chat`);
+                router.push(`/chat?conversationId=${result.id}`);
                 break;
             case 'prospect':
                 router.push(`/prospects`);
