@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, Filter, ChevronDown, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
+import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, ChevronLeft, ChevronRight, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ConversationsDayModal } from './ConversationsDayModal';
 import { CreditsDetailsModal } from './CreditsDetailsModal';
 import { ResponseRateDetailsModal } from './ResponseRateDetailsModal';
-import { getConversationsByDate, getCreditsDetails, getResponseRateDetails } from '@/lib/actions/dashboard';
+import { getConversationsByDate, getCreditsDetails, getResponseRateDetails, getWeeklyConversationsData } from '@/lib/actions/dashboard';
 
 interface DashboardClientProps {
     stats: {
@@ -84,16 +84,42 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
     const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
     const [responseData, setResponseData] = useState<any>(null);
     const [isLoadingResponse, setIsLoadingResponse] = useState(false);
+    
+    // Weekly navigation state
+    const [weekOffset, setWeekOffset] = useState(0);
+    const [weeklyData, setWeeklyData] = useState(() => {
+        return {
+            ...weeklyConversations,
+            weekStart: new Date(weeklyConversations.weekStart),
+            weekEnd: new Date(weeklyConversations.weekEnd),
+            data: weeklyConversations.data.map(item => ({
+                ...item,
+                date: new Date(item.date)
+            }))
+        };
+    });
+    const [isLoadingWeeklyData, setIsLoadingWeeklyData] = useState(false);
 
-    // Convert date strings to Date objects
-    const weeklyData = {
-        ...weeklyConversations,
-        weekStart: new Date(weeklyConversations.weekStart),
-        weekEnd: new Date(weeklyConversations.weekEnd),
-        data: weeklyConversations.data.map(item => ({
-            ...item,
-            date: new Date(item.date)
-        }))
+    // Load weekly data when weekOffset changes
+    const handleWeekChange = async (newOffset: number) => {
+        setWeekOffset(newOffset);
+        setIsLoadingWeeklyData(true);
+        try {
+            const data = await getWeeklyConversationsData(newOffset);
+            setWeeklyData({
+                ...data,
+                weekStart: new Date(data.weekStart),
+                weekEnd: new Date(data.weekEnd),
+                data: data.data.map(item => ({
+                    ...item,
+                    date: new Date(item.date)
+                }))
+            });
+        } catch (error) {
+            console.error('Error loading weekly data:', error);
+        } finally {
+            setIsLoadingWeeklyData(false);
+        }
     };
 
     const formatWeekRange = (start: Date, end: Date) => {
@@ -196,17 +222,6 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                     <h1 className="text-gray-900 text-3xl font-extrabold tracking-tight mb-2">Panel Principal</h1>
                     <p className="text-gray-500 font-medium">Información estratégica de tus agentes e interacciones</p>
                 </div>
-
-                <div className="flex gap-3">
-                    <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-100 rounded-2xl text-sm text-gray-700 hover:shadow-md hover:border-gray-200 transition-all font-bold cursor-pointer group">
-                        <Filter className="w-4 h-4 text-gray-400 group-hover:text-[#21AC96]" />
-                        Filtrar Datos
-                    </button>
-                    <button className="flex items-center gap-2 px-5 py-2.5 bg-[#21AC96] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all cursor-pointer">
-                        <span>Últimos 30 días</span>
-                        <ChevronDown className="w-4 h-4 opacity-70" />
-                    </button>
-                </div>
             </div>
 
             {/* Stats Cards */}
@@ -253,11 +268,39 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                     {/* Week Navigation */}
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
-                            <div className="px-4 py-2 bg-gray-50 rounded-xl">
-                                <span className="text-sm font-bold text-gray-700">
-                                    {formatWeekRange(weeklyData.weekStart, weeklyData.weekEnd)}
-                                </span>
+                            <button
+                                onClick={() => handleWeekChange(weekOffset - 1)}
+                                disabled={isLoadingWeeklyData}
+                                className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 hover:border-[#21AC96] transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                            >
+                                <ChevronLeft className="w-5 h-5 text-gray-400 group-hover:text-[#21AC96] transition-colors" />
+                            </button>
+                            <div className="px-5 py-2.5 bg-gray-50 rounded-xl min-w-[200px] text-center">
+                                {isLoadingWeeklyData ? (
+                                    <div className="animate-pulse">
+                                        <div className="h-4 bg-gray-200 rounded w-32 mx-auto"></div>
+                                    </div>
+                                ) : (
+                                    <span className="text-sm font-bold text-gray-700">
+                                        {formatWeekRange(weeklyData.weekStart, weeklyData.weekEnd)}
+                                    </span>
+                                )}
                             </div>
+                            <button
+                                onClick={() => handleWeekChange(weekOffset + 1)}
+                                disabled={isLoadingWeeklyData}
+                                className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 hover:border-[#21AC96] transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                            >
+                                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#21AC96] transition-colors" />
+                            </button>
+                            {weekOffset !== 0 && (
+                                <button
+                                    onClick={() => handleWeekChange(0)}
+                                    className="ml-2 px-4 py-2 text-sm font-bold text-[#21AC96] hover:bg-[#21AC96]/10 rounded-xl transition-colors"
+                                >
+                                    Hoy
+                                </button>
+                            )}
                         </div>
                     </div>
 
