@@ -54,6 +54,7 @@ export function Topbar() {
 
     // Always show "Mi cuenta" instead of waiting for user name
     const displayText = 'Mi cuenta';
+    const currentDate = format(new Date(), 'dd MMM yyyy', { locale: es });
 
     useEffect(() => {
         const fetchCredits = async () => {
