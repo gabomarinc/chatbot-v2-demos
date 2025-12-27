@@ -5,6 +5,7 @@ import { Plus, User, Mail, Shield, MoreVertical, Trash2, Edit, Users, Clock, Che
 import { cn } from '@/lib/utils';
 import { InviteMemberModal } from './InviteMemberModal';
 import { MaxMembersModal } from './MaxMembersModal';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { removeTeamMember, updateTeamMemberRole } from '@/lib/actions/team';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -117,25 +118,30 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers,
         return format(date, 'dd/MM/yyyy HH:mm', { locale: es });
     };
 
-    const handleRemoveMember = async (memberId: string) => {
-        if (!confirm('¿Estás seguro de que quieres eliminar a este miembro del equipo?')) {
-            return;
-        }
+    const handleRemoveMemberClick = (memberId: string, memberName: string) => {
+        setMemberToDelete({ id: memberId, name: memberName });
+        setIsDeleteModalOpen(true);
+        setIsActionMenuOpen(null);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!memberToDelete) return;
 
         setIsLoading(true);
         try {
-            const result = await removeTeamMember(memberId);
+            const result = await removeTeamMember(memberToDelete.id);
             if (result.error) {
                 alert(result.error);
             } else {
-                setMembers(members.filter(m => m.id !== memberId));
+                setMembers(members.filter(m => m.id !== memberToDelete.id));
                 router.refresh();
+                setIsDeleteModalOpen(false);
+                setMemberToDelete(null);
             }
         } catch (error) {
             alert('Error al eliminar miembro');
         } finally {
             setIsLoading(false);
-            setIsActionMenuOpen(null);
         }
     };
 
@@ -342,7 +348,7 @@ export function TeamPageClient({ initialMembers, currentMemberCount, maxMembers,
                                                                             <>
                                                                                 <div className="h-px bg-gray-100 my-1"></div>
                                                                                 <button
-                                                                                    onClick={() => handleRemoveMember(member.id)}
+                                                                                    onClick={() => handleRemoveMemberClick(member.id, member.user.name || member.user.email)}
                                                                                     className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                                                                                 >
                                                                                     <Trash2 className="w-4 h-4" />
