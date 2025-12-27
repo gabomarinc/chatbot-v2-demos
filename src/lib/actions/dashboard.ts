@@ -589,6 +589,13 @@ export async function getConversations() {
         include: {
             agent: true,
             channel: true,
+            assignedUser: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true
+                }
+            },
             messages: {
                 orderBy: { createdAt: 'desc' },
                 take: 1

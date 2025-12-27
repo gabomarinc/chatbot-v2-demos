@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Send, MoreVertical, Phone, Video, UserPlus, X, Calendar, MessageCircle, Bot, Paperclip } from 'lucide-react';
+import { Search, Send, MoreVertical, Phone, Video, UserPlus, X, Calendar, MessageCircle, Bot, Paperclip, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getChatMessages } from '@/lib/actions/dashboard';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { AssignConversationModal } from './AssignConversationModal';
 
 interface Message {
     id: string;
@@ -24,19 +25,34 @@ interface Conversation {
     externalId: string;
     status: 'OPEN' | 'PENDING' | 'CLOSED';
     channel?: { type: string; displayName: string };
+    assignedTo?: string | null;
+    assignedUser?: { id: string; name: string | null; email: string } | null;
+}
+
+interface TeamMember {
+    id: string;
+    user: {
+        id: string;
+        name: string | null;
+        email: string;
+    };
 }
 
 interface ChatInterfaceProps {
     initialConversations: Conversation[];
     initialConversationId?: string;
+    teamMembers: TeamMember[];
+    currentUserId?: string;
+    userRole?: 'OWNER' | 'MANAGER' | 'AGENT' | null;
 }
 
-export function ChatInterface({ initialConversations, initialConversationId }: ChatInterfaceProps) {
+export function ChatInterface({ initialConversations, initialConversationId, teamMembers, currentUserId, userRole }: ChatInterfaceProps) {
     const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
     const [selectedConvId, setSelectedConvId] = useState<string | null>(initialConversationId || null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [newMessage, setNewMessage] = useState('');
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const activeConversation = conversations.find(c => c.id === selectedConvId);
@@ -91,11 +107,11 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
             <div className="w-80 border-r border-gray-100 flex flex-col bg-white">
                 <div className="p-6 border-b border-gray-50">
                     <div className="relative group">
-                        <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#21AC96] transition-colors" />
+                        <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#1E9A86] transition-colors" />
                         <input
                             type="text"
                             placeholder="Buscar chats..."
-                            className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-[#21AC96]/5 focus:bg-white focus:border-[#21AC96] transition-all font-medium placeholder-gray-400"
+                            className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-[#1E9A86]/5 focus:bg-white focus:border-[#1E9A86] transition-all font-medium placeholder-gray-400"
                         />
                     </div>
                 </div>
@@ -108,27 +124,35 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                             className={cn(
                                 "w-full p-4 rounded-2xl flex items-start gap-4 transition-all text-left group border border-transparent hover:border-gray-100",
                                 selectedConvId === conv.id
-                                    ? "bg-[#21AC96]/5 border-[#21AC96]/10 shadow-sm"
+                                    ? "bg-[#1E9A86]/5 border-[#1E9A86]/10 shadow-sm"
                                     : "hover:bg-gray-50"
                             )}
                         >
                             <div className={cn(
                                 "w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 transition-transform group-hover:scale-105 shadow-sm",
                                 selectedConvId === conv.id
-                                    ? "bg-gradient-to-br from-[#21AC96] to-[#1a8a78] text-white shadow-[#21AC96]/20"
+                                    ? "bg-gradient-to-br from-[#1E9A86] to-[#158571] text-white shadow-[#1E9A86]/20"
                                     : "bg-gray-100 text-gray-500"
                             )}>
                                 {conv.channel?.type === 'WHATSAPP' ? '📱' : '💬'}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className={cn(
-                                        "text-sm font-bold truncate",
-                                        selectedConvId === conv.id ? "text-gray-900" : "text-gray-700"
-                                    )}>
-                                        {conv.contactName || conv.externalId}
-                                    </span>
-                                    <span className="text-[10px] text-gray-400 font-medium">
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className={cn(
+                                            "text-sm font-bold truncate",
+                                            selectedConvId === conv.id ? "text-gray-900" : "text-gray-700"
+                                        )}>
+                                            {conv.contactName || conv.externalId}
+                                        </span>
+                                        {conv.assignedUser && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#1E9A86]/10 text-[#1E9A86] rounded-lg text-[10px] font-bold border border-[#1E9A86]/20 shrink-0">
+                                                <User className="w-3 h-3" />
+                                                {conv.assignedUser.name || conv.assignedUser.email.split('@')[0]}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] text-gray-400 font-medium shrink-0">
                                         {conv.lastMessageAt ? format(new Date(conv.lastMessageAt), 'HH:mm') : ''}
                                     </span>
                                 </div>
@@ -156,14 +180,14 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                     {/* Chat Header */}
                     <div className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 shadow-[0_4px_20px_rgba(0,0,0,0.02)] z-10">
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-gradient-to-br from-[#21AC96] to-[#1a8a78] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#21AC96]/20 font-bold text-lg">
+                            <div className="w-10 h-10 bg-gradient-to-br from-[#1E9A86] to-[#158571] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#1E9A86]/20 font-bold text-lg">
                                 {activeConversation.contactName?.charAt(0).toUpperCase() || '?'}
                             </div>
                             <div>
                                 <h3 className="text-gray-900 text-sm font-extrabold">{activeConversation.contactName || activeConversation.externalId}</h3>
                                 <div className="flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                    <p className="text-xs text-gray-500 font-medium">Atendido por <span className="text-[#21AC96]">{activeConversation.agent.name}</span></p>
+                                    <p className="text-xs text-gray-500 font-medium">Atendido por <span className="text-[#1E9A86]">{activeConversation.agent.name}</span></p>
                                 </div>
                             </div>
                         </div>
@@ -200,7 +224,7 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                                             <div className={cn(
                                                 "p-4 shadow-sm text-sm font-medium leading-relaxed",
                                                 isAgent || isHuman
-                                                    ? "bg-gradient-to-br from-[#21AC96] to-[#1a8a78] text-white rounded-[1.25rem] rounded-tr-none shadow-[#21AC96]/10"
+                                                    ? "bg-gradient-to-br from-[#1E9A86] to-[#158571] text-white rounded-[1.25rem] rounded-tr-none shadow-[#1E9A86]/10"
                                                     : "bg-white text-gray-800 border border-gray-100 rounded-[1.25rem] rounded-tl-none"
                                             )}>
                                                 {msg.content}
@@ -210,7 +234,7 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                                                 isUser ? "justify-start pl-2" : "justify-end pr-2"
                                             )}>
                                                 {isAgent && <Bot className="w-3 h-3" />}
-                                                {isHuman && <span className="text-[#21AC96]">Tú</span>}
+                                                {isHuman && <span className="text-[#1E9A86]">Tú</span>}
                                                 <span>{format(new Date(msg.createdAt), 'HH:mm')}</span>
                                             </div>
                                         </div>
@@ -239,12 +263,12 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Escribe un mensaje..."
-                                className="flex-1 bg-gray-50 border-0 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#21AC96]/20 transition-all placeholder-gray-400"
+                                className="flex-1 bg-gray-50 border-0 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1E9A86]/20 transition-all placeholder-gray-400"
                             />
                             <button
                                 type="submit"
                                 disabled={!newMessage.trim()}
-                                className="p-4 bg-[#21AC96] text-white rounded-2xl shadow-lg shadow-[#21AC96]/20 hover:bg-[#1a8a78] transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                                className="p-4 bg-[#1E9A86] text-white rounded-2xl shadow-lg shadow-[#1E9A86]/20 hover:bg-[#158571] transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
                             >
                                 <Send className="w-5 h-5" />
                             </button>
@@ -254,7 +278,7 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
             ) : (
                 <div className="flex-1 flex flex-col items-center justify-center bg-gray-50/50 text-gray-400 p-8 text-center animate-fade-in">
                     <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-6 shadow-sm border border-gray-100">
-                        <MessageCircle className="w-10 h-10 text-[#21AC96]/40" />
+                        <MessageCircle className="w-10 h-10 text-[#1E9A86]/40" />
                     </div>
                     <h3 className="text-gray-900 font-extrabold text-xl mb-2">Selecciona una conversación</h3>
                     <p className="max-w-xs text-gray-500 font-medium">Elige un chat de la lista para ver el historial y responder en tiempo real.</p>
@@ -274,13 +298,38 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
 
                     <div className="space-y-6">
                         <div className="space-y-3">
-                            <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Acciones Rápidas</label>
-                            <button className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-bold text-xs group">
-                                <UserPlus className="w-4 h-4 text-gray-400 group-hover:text-[#21AC96] transition-colors" />
-                                Asumir atención
+                            <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Asignación</label>
+                            {activeConversation.assignedUser ? (
+                                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-xs text-gray-500 font-medium mb-2">Asignada a:</p>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-gradient-to-br from-[#1E9A86] to-[#158571] rounded-lg flex items-center justify-center">
+                                            <User className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-gray-900 truncate">
+                                                {activeConversation.assignedUser.name || activeConversation.assignedUser.email.split('@')[0]}
+                                            </p>
+                                            {activeConversation.assignedUser.name && (
+                                                <p className="text-xs text-gray-500 truncate">{activeConversation.assignedUser.email}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-xl">
+                                    <p className="text-xs text-yellow-700 font-medium">No asignada</p>
+                                </div>
+                            )}
+                            <button 
+                                onClick={() => setIsAssignModalOpen(true)}
+                                className="w-full flex items-center gap-3 px-4 py-3 bg-[#1E9A86] text-white rounded-xl hover:bg-[#158571] transition-colors font-bold text-xs group"
+                            >
+                                <UserPlus className="w-4 h-4" />
+                                {activeConversation.assignedUser ? 'Cambiar asignación' : 'Asignar conversación'}
                             </button>
                             <button className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-bold text-xs group">
-                                <Calendar className="w-4 h-4 text-gray-400 group-hover:text-[#21AC96] transition-colors" />
+                                <Calendar className="w-4 h-4 text-gray-400 group-hover:text-[#1E9A86] transition-colors" />
                                 Agendar cita
                             </button>
                             <button className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 text-gray-700 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors font-bold text-xs group">
@@ -306,6 +355,19 @@ export function ChatInterface({ initialConversations, initialConversationId }: C
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Assign Conversation Modal */}
+            {selectedConvId && (
+                <AssignConversationModal
+                    isOpen={isAssignModalOpen}
+                    onClose={() => setIsAssignModalOpen(false)}
+                    conversationId={selectedConvId}
+                    currentAssignedUserId={activeConversation?.assignedTo || null}
+                    teamMembers={teamMembers}
+                    currentUserId={currentUserId}
+                    userRole={userRole}
+                />
             )}
         </div>
     );

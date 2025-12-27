@@ -1,5 +1,7 @@
-import { getConversations } from '@/lib/actions/dashboard';
+import { getConversations, getTeamMembers } from '@/lib/actions/dashboard';
+import { getUserWorkspaceRole } from '@/lib/actions/workspace';
 import { ChatInterface } from '@/components/chat/ChatInterface';
+import { auth } from '@/auth';
 
 export default async function ChatPage({
     searchParams,
@@ -7,10 +9,15 @@ export default async function ChatPage({
     searchParams: Promise<{ conversationId?: string }>;
 }) {
     const params = await searchParams;
-    const conversations = await getConversations();
+    const session = await auth();
+    
+    const [conversations, teamMembers, userRole] = await Promise.all([
+        getConversations(),
+        getTeamMembers(),
+        getUserWorkspaceRole()
+    ]);
 
     // Map database conversations to client interface
-    // Note: getConversations already includes relationships, we just need to ensure correct typing match
     const initialConversations = conversations.map(c => ({
         id: c.id,
         agent: c.agent,
@@ -20,8 +27,18 @@ export default async function ChatPage({
         contactName: c.contactName,
         externalId: c.externalId,
         status: c.status,
-        channel: c.channel
+        channel: c.channel,
+        assignedTo: c.assignedTo,
+        assignedUser: c.assignedUser
     }));
 
-    return <ChatInterface initialConversations={initialConversations as any} initialConversationId={params.conversationId} />;
+    return (
+        <ChatInterface 
+            initialConversations={initialConversations as any} 
+            initialConversationId={params.conversationId}
+            teamMembers={teamMembers}
+            currentUserId={session?.user?.id}
+            userRole={userRole}
+        />
+    );
 }
