@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
-import { startOfMonth, subMonths, format, startOfWeek, endOfWeek, eachDayOfInterval, subWeeks, addWeeks, subDays, getDay, getHours } from 'date-fns'
+import { startOfMonth, subMonths, format, startOfWeek, endOfWeek, eachDayOfInterval, subWeeks, addWeeks, subDays, getDay, getHours, differenceInSeconds, differenceInMinutes } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { revalidatePath } from 'next/cache'
 import { cache } from 'react'
@@ -671,3 +671,283 @@ export const getProspectDetails = cache(async (conversationId: string) => {
         documents
     }
 })
+
+// Get detailed credits information
+export async function getCreditsDetails() {
+    const workspace = await getUserWorkspace()
+    if (!workspace) return null
+
+    const creditBalance = await prisma.creditBalance.findUnique({
+        where: { workspaceId: workspace.id }
+    })
+
+    if (!creditBalance) return null
+
+    // Get subscription info
+    const subscription = await prisma.subscription.findUnique({
+        where: { workspaceId: workspace.id }
+    })
+
+    // Get usage logs for last 30 days
+    const thirtyDaysAgo = subDays(new Date(), 30)
+    const usageLogsRaw = await prisma.usageLog.findMany({
+        where: {
+            workspaceId: workspace.id,
+            createdAt: { gte: thirtyDaysAgo }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 15
+    })
+
+    // Get agent names for the logs
+    const agentIds = usageLogsRaw.filter(log => log.agentId).map(log => log.agentId!)
+    const agents = await prisma.agent.findMany({
+        where: { id: { in: agentIds } },
+        select: { id: true, name: true }
+    })
+    const agentMap = new Map(agents.map(a => [a.id, a.name]))
+
+    const usageLogs = usageLogsRaw.map(log => ({
+        ...log,
+        agentName: log.agentId ? agentMap.get(log.agentId) || 'N/A' : 'N/A'
+    }))
+
+    // Get daily usage for last 7 days
+    const sevenDaysAgo = subDays(new Date(), 7)
+    const dailyUsage = await prisma.usageLog.findMany({
+        where: {
+            workspaceId: workspace.id,
+            createdAt: { gte: sevenDaysAgo }
+        },
+        select: {
+            creditsUsed: true,
+            createdAt: true
+        }
+    })
+
+    // Group by day
+    const dailyUsageMap: Record<string, number> = {}
+    dailyUsage.forEach(log => {
+        const day = format(new Date(log.createdAt), 'yyyy-MM-dd')
+        dailyUsageMap[day] = (dailyUsageMap[day] || 0) + log.creditsUsed
+    })
+
+    const dailyUsageData = eachDayOfInterval({ start: sevenDaysAgo, end: new Date() }).map(day => {
+        const dayStr = format(day, 'yyyy-MM-dd')
+        return {
+            date: dayStr,
+            credits: dailyUsageMap[dayStr] || 0
+        }
+    })
+
+    // Group by agent
+    const agentUsage = usageLogs.reduce((acc, log) => {
+        if (!log.agentId) return acc
+        const agentId = log.agentId
+        if (!acc[agentId]) {
+            acc[agentId] = {
+                agentId,
+                agentName: log.agentName,
+                credits: 0
+            }
+        }
+        acc[agentId].credits += log.creditsUsed
+        return acc
+    }, {} as Record<string, { agentId: string; agentName: string; credits: number }>)
+
+    const agentUsageArray = Object.values(agentUsage).sort((a, b) => b.credits - a.credits).slice(0, 5)
+
+    // Group by model
+    const modelUsage = usageLogs.reduce((acc, log) => {
+        const model = log.model
+        acc[model] = (acc[model] || 0) + log.creditsUsed
+        return acc
+    }, {} as Record<string, number>)
+
+    const modelUsageArray = Object.entries(modelUsage)
+        .map(([model, credits]) => ({ model, credits }))
+        .sort((a, b) => b.credits - a.credits)
+
+    // Calculate average daily usage
+    const totalLast7Days = dailyUsageData.reduce((sum, day) => sum + day.credits, 0)
+    const avgDailyUsage = totalLast7Days / 7
+
+    // Estimate days remaining (if balance > 0 and avgDailyUsage > 0)
+    const daysRemaining = avgDailyUsage > 0 && creditBalance.balance > 0
+        ? Math.floor(creditBalance.balance / avgDailyUsage)
+        : null
+
+    return {
+        balance: creditBalance.balance,
+        totalUsed: creditBalance.totalUsed,
+        lastResetAt: creditBalance.lastResetAt,
+        subscription: subscription ? {
+            planId: subscription.planId,
+            status: subscription.status,
+            currentPeriodEnd: subscription.currentPeriodEnd
+        } : null,
+        recentUsage: usageLogs.map(log => ({
+            id: log.id,
+            date: log.createdAt,
+            agentName: log.agentName,
+            model: log.model,
+            credits: log.creditsUsed,
+            tokens: log.tokensUsed
+        })),
+        dailyUsage: dailyUsageData,
+        agentUsage: agentUsageArray,
+        modelUsage: modelUsageArray,
+        avgDailyUsage: Math.round(avgDailyUsage * 100) / 100,
+        daysRemaining
+    }
+}
+
+// Get detailed response rate information
+export async function getResponseRateDetails() {
+    const workspace = await getUserWorkspace()
+    if (!workspace) return null
+
+    // Get all conversations
+    const conversations = await prisma.conversation.findMany({
+        where: { agent: { workspaceId: workspace.id } },
+        include: {
+            agent: {
+                select: { id: true, name: true }
+            },
+            channel: {
+                select: { type: true }
+            },
+            messages: {
+                orderBy: { createdAt: 'asc' },
+                select: {
+                    role: true,
+                    createdAt: true
+                }
+            }
+        }
+    })
+
+    const totalConversations = conversations.length
+    const conversationsWithResponse = conversations.filter(conv => 
+        conv.messages.some(msg => msg.role === 'AGENT')
+    ).length
+
+    const responseRate = totalConversations > 0
+        ? Math.round((conversationsWithResponse / totalConversations) * 100)
+        : 0
+
+    // Calculate response times
+    const responseTimes: number[] = []
+    conversations.forEach(conv => {
+        const firstUserMessage = conv.messages.find(msg => msg.role === 'USER')
+        const firstAgentMessage = conv.messages.find(msg => msg.role === 'AGENT')
+        
+        if (firstUserMessage && firstAgentMessage) {
+            const timeDiff = differenceInSeconds(
+                new Date(firstAgentMessage.createdAt),
+                new Date(firstUserMessage.createdAt)
+            )
+            if (timeDiff > 0) {
+                responseTimes.push(timeDiff)
+            }
+        }
+    })
+
+    const avgResponseTimeSeconds = responseTimes.length > 0
+        ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+        : 0
+
+    const avgResponseTimeMinutes = Math.round(avgResponseTimeSeconds / 60 * 100) / 100
+
+    // Get conversations without response
+    const conversationsWithoutResponse = conversations
+        .filter(conv => !conv.messages.some(msg => msg.role === 'AGENT'))
+        .slice(0, 10)
+        .map(conv => ({
+            id: conv.id,
+            contactName: conv.contactName || conv.externalId,
+            createdAt: conv.createdAt,
+            agentName: conv.agent.name,
+            channelType: conv.channel?.type || 'WEBCHAT',
+            messageCount: conv.messages.length
+        }))
+
+    // Group by agent
+    const agentStats: Record<string, { name: string; total: number; responded: number }> = {}
+    conversations.forEach(conv => {
+        const agentId = conv.agent.id
+        const agentName = conv.agent.name
+        if (!agentStats[agentId]) {
+            agentStats[agentId] = { name: agentName, total: 0, responded: 0 }
+        }
+        agentStats[agentId].total++
+        if (conv.messages.some(msg => msg.role === 'AGENT')) {
+            agentStats[agentId].responded++
+        }
+    })
+
+    const agentStatsArray = Object.values(agentStats).map(stat => ({
+        name: stat.name,
+        total: stat.total,
+        responded: stat.responded,
+        rate: stat.total > 0 ? Math.round((stat.responded / stat.total) * 100) : 0
+    })).sort((a, b) => b.total - a.total)
+
+    // Group by channel
+    const channelStats: Record<string, { total: number; responded: number }> = {}
+    conversations.forEach(conv => {
+        const channelType = conv.channel?.type || 'WEBCHAT'
+        if (!channelStats[channelType]) {
+            channelStats[channelType] = { total: 0, responded: 0 }
+        }
+        channelStats[channelType].total++
+        if (conv.messages.some(msg => msg.role === 'AGENT')) {
+            channelStats[channelType].responded++
+        }
+    })
+
+    const channelStatsArray = Object.entries(channelStats).map(([type, stat]) => ({
+        type,
+        total: stat.total,
+        responded: stat.responded,
+        rate: stat.total > 0 ? Math.round((stat.responded / stat.total) * 100) : 0
+    })).sort((a, b) => b.total - a.total)
+
+    // Get weekly response rate for last 4 weeks
+    const fourWeeksAgo = subDays(new Date(), 28)
+    const weeklyData = []
+    for (let i = 3; i >= 0; i--) {
+        const weekStart = startOfWeek(subWeeks(new Date(), i))
+        const weekEnd = endOfWeek(subWeeks(new Date(), i))
+        
+        const weekConversations = conversations.filter(conv => {
+            const convDate = new Date(conv.createdAt)
+            return convDate >= weekStart && convDate <= weekEnd
+        })
+        
+        const weekTotal = weekConversations.length
+        const weekResponded = weekConversations.filter(conv =>
+            conv.messages.some(msg => msg.role === 'AGENT')
+        ).length
+        
+        weeklyData.push({
+            week: format(weekStart, 'd MMM', { locale: es }),
+            total: weekTotal,
+            responded: weekResponded,
+            rate: weekTotal > 0 ? Math.round((weekResponded / weekTotal) * 100) : 0
+        })
+    }
+
+    return {
+        totalConversations,
+        conversationsWithResponse,
+        conversationsWithoutResponse: conversations.length - conversationsWithResponse,
+        responseRate,
+        avgResponseTimeSeconds,
+        avgResponseTimeMinutes,
+        conversationsWithoutResponseList: conversationsWithoutResponse,
+        agentStats: agentStatsArray,
+        channelStats: channelStatsArray,
+        weeklyData
+    }
+}

@@ -1,12 +1,15 @@
 'use client'
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, Filter, ChevronDown, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ConversationsDayModal } from './ConversationsDayModal';
-import { getConversationsByDate } from '@/lib/actions/dashboard';
+import { CreditsDetailsModal } from './CreditsDetailsModal';
+import { ResponseRateDetailsModal } from './ResponseRateDetailsModal';
+import { getConversationsByDate, getCreditsDetails, getResponseRateDetails } from '@/lib/actions/dashboard';
 
 interface DashboardClientProps {
     stats: {
@@ -66,10 +69,21 @@ const ClickableDot = ({ cx, cy, payload, onClick }: any) => {
 };
 
 export default function DashboardClient({ stats, chartData, channels, topAgents, weeklyConversations }: DashboardClientProps) {
+    const router = useRouter();
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [conversations, setConversations] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+    
+    // Credits modal state
+    const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
+    const [creditsData, setCreditsData] = useState<any>(null);
+    const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+    
+    // Response rate modal state
+    const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
+    const [responseData, setResponseData] = useState<any>(null);
+    const [isLoadingResponse, setIsLoadingResponse] = useState(false);
 
     // Convert date strings to Date objects
     const weeklyData = {
@@ -112,11 +126,66 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
         setSelectedDate(null);
         setConversations([]);
     };
+
+    const handleCreditsClick = async () => {
+        setIsCreditsModalOpen(true);
+        setIsLoadingCredits(true);
+        try {
+            const data = await getCreditsDetails();
+            setCreditsData(data);
+        } catch (error) {
+            console.error('Error loading credits details:', error);
+        } finally {
+            setIsLoadingCredits(false);
+        }
+    };
+
+    const handleResponseRateClick = async () => {
+        setIsResponseModalOpen(true);
+        setIsLoadingResponse(true);
+        try {
+            const data = await getResponseRateDetails();
+            setResponseData(data);
+        } catch (error) {
+            console.error('Error loading response rate details:', error);
+        } finally {
+            setIsLoadingResponse(false);
+        }
+    };
+
     const statCards = [
-        { label: 'Total de Conversaciones', value: stats.conversaciones.toLocaleString(), change: '0%', isPositive: true, icon: CheckCircle },
-        { label: 'Créditos Disponibles', value: stats.creditos.toLocaleString(), change: '0%', isPositive: true, icon: Coins },
-        { label: 'Nuevos Contactos', value: stats.contactos.toLocaleString(), change: '0%', isPositive: true, icon: Users },
-        { label: 'Tasa de Respuesta', value: `${stats.tasaRespuesta}%`, change: '0%', isPositive: true, icon: Calendar },
+        { 
+            label: 'Total de Conversaciones', 
+            value: stats.conversaciones.toLocaleString(), 
+            change: '0%', 
+            isPositive: true, 
+            icon: CheckCircle,
+            onClick: () => router.push('/chat')
+        },
+        { 
+            label: 'Créditos Disponibles', 
+            value: stats.creditos.toLocaleString(), 
+            change: '0%', 
+            isPositive: true, 
+            icon: Coins,
+            onClick: handleCreditsClick
+        },
+        { 
+            label: 'Nuevos Contactos', 
+            value: stats.contactos.toLocaleString(), 
+            change: '0%', 
+            isPositive: true, 
+            icon: Users,
+            onClick: () => router.push('/prospects')
+        },
+        { 
+            label: 'Tasa de Respuesta', 
+            value: `${stats.tasaRespuesta}%`, 
+            change: '0%', 
+            isPositive: true, 
+            icon: Calendar,
+            onClick: handleResponseRateClick
+        },
     ];
 
     return (
@@ -145,7 +214,11 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                 {statCards.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)] hover:shadow-xl hover:shadow-[#21AC96]/5 transition-all group overflow-hidden relative">
+                        <div 
+                            key={index} 
+                            onClick={stat.onClick}
+                            className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-[20px_0_40px_rgba(0,0,0,0.02)] hover:shadow-xl hover:shadow-[#21AC96]/5 transition-all group overflow-hidden relative cursor-pointer"
+                        >
                             <div className="absolute top-0 right-0 w-24 h-24 bg-[#21AC96]/5 rounded-full -translate-y-12 translate-x-12 group-hover:bg-[#21AC96]/10 transition-colors"></div>
 
                             <div className="flex items-center justify-between mb-6 relative">
@@ -458,6 +531,22 @@ export default function DashboardClient({ stats, chartData, channels, topAgents,
                     isLoading={isLoadingConversations}
                 />
             )}
+
+            {/* Credits Details Modal */}
+            <CreditsDetailsModal
+                isOpen={isCreditsModalOpen}
+                onClose={() => setIsCreditsModalOpen(false)}
+                creditsData={creditsData}
+                isLoading={isLoadingCredits}
+            />
+
+            {/* Response Rate Details Modal */}
+            <ResponseRateDetailsModal
+                isOpen={isResponseModalOpen}
+                onClose={() => setIsResponseModalOpen(false)}
+                responseData={responseData}
+                isLoading={isLoadingResponse}
+            />
         </div>
     );
 }
