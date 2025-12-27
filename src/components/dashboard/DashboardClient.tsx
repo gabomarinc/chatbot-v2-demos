@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, ChevronLeft, ChevronRight, Bot, Sparkles, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
+import { TrendingUp, TrendingDown, CheckCircle, Coins, Users, Calendar, ChevronLeft, ChevronRight, Bot, Globe, Instagram, MessageCircle, BarChart as BarChartIcon, MessageSquare, Clock, TrendingUp as TrendingUpIcon, Smartphone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
