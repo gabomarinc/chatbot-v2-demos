@@ -526,7 +526,7 @@ INSTRUCCIONES DE EJECUCIÓN:
                     tokensUsed: tokensUsed,
                     creditsUsed: 1,
                     // Store strict model name used
-                    model: model.includes('gemini') ? 'gemini-1.5-flash' : 'gpt-4o-mini'
+                    model: model.includes('gemini') ? 'gemini-1.5-flash' : modelToUse
                 }
             })
         ]);
