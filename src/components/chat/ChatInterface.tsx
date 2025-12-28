@@ -15,6 +15,11 @@ interface Message {
     role: 'USER' | 'AGENT' | 'HUMAN';
     content: string;
     createdAt: Date;
+    metadata?: {
+        type?: string;
+        url?: string;
+        fileName?: string;
+    } | null;
 }
 
 interface Conversation {
@@ -273,7 +278,47 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                                                     ? "bg-gradient-to-br from-[#1E9A86] to-[#158571] text-white rounded-[1.25rem] rounded-tr-none shadow-[#1E9A86]/10"
                                                     : "bg-white text-gray-800 border border-gray-100 rounded-[1.25rem] rounded-tl-none"
                                             )}>
-                                                {msg.content}
+                                                {/* Show image if present */}
+                                                {msg.metadata?.type === 'image' && msg.metadata?.url && (
+                                                    <div className="mb-3 rounded-xl overflow-hidden max-w-full">
+                                                        <img 
+                                                            src={msg.metadata.url} 
+                                                            alt="Imagen adjunta"
+                                                            className="w-full h-auto object-contain max-h-64 rounded-lg"
+                                                        />
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Show PDF link if present */}
+                                                {msg.metadata?.type === 'pdf' && msg.metadata?.url && (
+                                                    <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                            </svg>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs font-medium text-gray-700 truncate">
+                                                                    {msg.metadata.fileName || 'Documento PDF'}
+                                                                </p>
+                                                                <a 
+                                                                    href={msg.metadata.url} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                                                >
+                                                                    Ver/Descargar PDF
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Message content */}
+                                                {msg.content && (
+                                                    <div className={msg.metadata?.type ? 'mt-2' : ''}>
+                                                        {msg.content}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className={cn(
                                                 "flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider",
