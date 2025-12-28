@@ -441,12 +441,12 @@ INSTRUCCIONES DE EJECUCIÓN:
                 function: t
             })) : undefined;
 
-            // Use gpt-4o for images (has vision), gpt-4o-mini for text only
-            modelUsedForLogging = (fileType === 'image' && imageBase64) ? 'gpt-4o' : 'gpt-4o-mini';
+            // Use gpt-4o for images (has vision), gpt-4o-mini for text only (modelUsedForLogging already set above)
+            const modelToUse = modelUsedForLogging;
             
             let completion = await currentOpenAI.chat.completions.create({
                 messages: openAiMessages as any,
-                model: modelUsedForLogging,
+                model: modelToUse,
                 temperature: agent.temperature,
                 tools: openAiTools as any,
             });
@@ -473,7 +473,7 @@ INSTRUCCIONES DE EJECUCIÓN:
                 }
                 completion = await currentOpenAI.chat.completions.create({
                     messages: openAiMessages as any,
-                    model: modelUsedForLogging,
+                    model: modelToUse,
                     temperature: agent.temperature,
                     tools: openAiTools as any,
                 });
