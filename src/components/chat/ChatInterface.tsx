@@ -174,21 +174,23 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0">
                                         <span className={cn(
-                                            "text-sm font-bold truncate",
+                                            "text-sm font-bold truncate block",
                                             selectedConvId === conv.id ? "text-gray-900" : "text-gray-700"
                                         )}>
                                             {conv.contactName || conv.externalId}
                                         </span>
                                         {conv.assignedUser && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#1E9A86]/10 text-[#1E9A86] rounded-lg text-[10px] font-bold border border-[#1E9A86]/20 shrink-0">
-                                                <User className="w-3 h-3" />
-                                                {conv.assignedUser.name || conv.assignedUser.email.split('@')[0]}
-                                            </span>
+                                            <div className="mt-1">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#1E9A86]/10 text-[#1E9A86] rounded-lg text-[10px] font-bold border border-[#1E9A86]/20">
+                                                    <User className="w-3 h-3" />
+                                                    {conv.assignedUser.name || conv.assignedUser.email.split('@')[0]}
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
-                                    <span className="text-[10px] text-gray-400 font-medium shrink-0">
+                                    <span className="text-[10px] text-gray-400 font-medium shrink-0 ml-2">
                                         {conv.lastMessageAt ? format(new Date(conv.lastMessageAt), 'HH:mm') : ''}
                                     </span>
                                 </div>

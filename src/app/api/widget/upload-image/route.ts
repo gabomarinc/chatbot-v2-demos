@@ -61,15 +61,25 @@ export async function POST(request: NextRequest) {
         }
 
         // Upload to R2
-        const fileUrl = await uploadFileToR2(
-            buffer,
-            `${Date.now()}-${file.name}`,
-            file.type
-        );
+        let fileUrl: string;
+        try {
+            fileUrl = await uploadFileToR2(
+                buffer,
+                `${Date.now()}-${file.name}`,
+                file.type
+            );
 
-        if (!fileUrl) {
+            if (!fileUrl || fileUrl === '') {
+                console.error('R2 upload returned empty URL');
+                return NextResponse.json(
+                    { error: 'Error al subir el archivo. Por favor, verifica la configuración del almacenamiento.' },
+                    { status: 500 }
+                );
+            }
+        } catch (error) {
+            console.error('Error uploading to R2:', error);
             return NextResponse.json(
-                { error: 'Failed to upload file' },
+                { error: error instanceof Error ? error.message : 'Error al subir el archivo' },
                 { status: 500 }
             );
         }

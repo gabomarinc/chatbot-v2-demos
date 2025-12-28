@@ -28,8 +28,9 @@ export async function uploadFileToR2(
     const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
     
     if (!R2_BUCKET_NAME || !R2_ACCOUNT_ID) {
-        console.error('R2 credentials missing');
-        return '';
+        const errorMsg = 'R2 credentials missing. Please configure R2_BUCKET_NAME and R2_ACCOUNT_ID environment variables.';
+        console.error(errorMsg);
+        throw new Error(errorMsg);
     }
 
     try {
@@ -59,9 +60,14 @@ export async function uploadFileToR2(
         }
 
         // Fallback: If no public domain, we might need pre-signed URLs or assume standard structure
-        return `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${key}`;
+        // Note: This URL might not work if the bucket is not public. Consider using pre-signed URLs instead.
+        const url = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${key}`;
+        
+        // For now, return the URL even if it might not be publicly accessible
+        // In production, you should use pre-signed URLs or configure a public domain
+        return url;
     } catch (error) {
         console.error('Error uploading to R2:', error);
-        return '';
+        throw error; // Re-throw to let caller handle it
     }
 }
