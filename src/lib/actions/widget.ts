@@ -193,6 +193,11 @@ export async function sendWidgetMessage(data: {
 
         let replyContent = '...';
         let tokensUsed = 0;
+        // Determine model to use: gpt-4o for images (has vision), otherwise use agent's configured model
+        let modelUsedForLogging = model; // Default to agent's model
+        if (!model.includes('gemini') && fileType === 'image' && imageBase64) {
+            modelUsedForLogging = 'gpt-4o'; // Override for images when using OpenAI
+        }
 
         // 5.1 Retrieve Context (RAG) - Optional, don't fail if it errors
         let context = "";
