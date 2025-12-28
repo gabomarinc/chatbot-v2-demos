@@ -22,6 +22,7 @@ interface AssignConversationModalProps {
     teamMembers: TeamMember[];
     currentUserId?: string;
     userRole?: 'OWNER' | 'MANAGER' | 'AGENT' | null;
+    onAssignmentChange?: (userId: string | null) => void;
 }
 
 export function AssignConversationModal({
@@ -31,7 +32,8 @@ export function AssignConversationModal({
     currentAssignedUserId,
     teamMembers,
     currentUserId,
-    userRole
+    userRole,
+    onAssignmentChange
 }: AssignConversationModalProps) {
     const router = useRouter();
     const [isAssigning, setIsAssigning] = useState(false);
@@ -52,6 +54,10 @@ export function AssignConversationModal({
             if (result.error) {
                 setError(result.error);
             } else {
+                // Actualizar estado local inmediatamente
+                if (onAssignmentChange) {
+                    onAssignmentChange(userId);
+                }
                 router.refresh();
                 onClose();
             }
@@ -70,6 +76,10 @@ export function AssignConversationModal({
             if (result.error) {
                 setError(result.error);
             } else {
+                // Actualizar estado local inmediatamente
+                if (onAssignmentChange) {
+                    onAssignmentChange(null);
+                }
                 router.refresh();
                 onClose();
             }

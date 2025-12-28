@@ -61,6 +61,38 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
 
     const activeConversation = conversations.find(c => c.id === selectedConvId);
 
+    // Helper function to update conversation assignment in local state
+    const updateConversationAssignment = (conversationId: string, userId: string | null) => {
+        if (userId) {
+            const user = teamMembers.find(m => m.user.id === userId);
+            if (user) {
+                setConversations(prev => prev.map(conv => 
+                    conv.id === conversationId 
+                        ? {
+                            ...conv,
+                            assignedTo: userId,
+                            assignedUser: {
+                                id: user.user.id,
+                                name: user.user.name,
+                                email: user.user.email
+                            }
+                        }
+                        : conv
+                ));
+            }
+        } else {
+            setConversations(prev => prev.map(conv => 
+                conv.id === conversationId 
+                    ? {
+                        ...conv,
+                        assignedTo: null,
+                        assignedUser: null
+                    }
+                    : conv
+            ));
+        }
+    };
+
     useEffect(() => {
         if (selectedConvId) {
             loadMessages(selectedConvId);
@@ -338,13 +370,17 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                             {!activeConversation.assignedUser && (
                                 <button 
                                     onClick={async () => {
-                                        if (!selectedConvId || isProcessing) return;
+                                        if (!selectedConvId || isProcessing || !currentUserId) return;
                                         setIsProcessing(true);
                                         try {
                                             const result = await assumeConversation(selectedConvId);
                                             if (result.error) {
                                                 alert(result.error);
                                             } else {
+                                                // Actualizar estado local inmediatamente
+                                                if (currentUserId) {
+                                                    updateConversationAssignment(selectedConvId, currentUserId);
+                                                }
                                                 router.refresh();
                                             }
                                         } catch (error) {
@@ -373,6 +409,8 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                                             if (result.error) {
                                                 alert(result.error);
                                             } else {
+                                                // Actualizar estado local inmediatamente
+                                                updateConversationAssignment(selectedConvId, null);
                                                 router.refresh();
                                             }
                                         } catch (error) {
@@ -439,6 +477,7 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                     teamMembers={teamMembers}
                     currentUserId={currentUserId}
                     userRole={userRole}
+                    onAssignmentChange={(userId) => updateConversationAssignment(selectedConvId, userId)}
                 />
             )}
         </div>
