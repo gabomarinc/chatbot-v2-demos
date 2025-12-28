@@ -203,7 +203,18 @@ export function WidgetInterface({ channel }: WidgetInterfaceProps) {
                 extractedText
             });
 
-            // 5. Update UI with Real Agent Reply (only if bot responded)
+            // 5. Update UI with Real User Message (with metadata from server) and Agent Reply
+            setMessages(prev => prev.map(msg => 
+                msg.id === tempId 
+                    ? {
+                        ...msg,
+                        id: savedUserMsg.id,
+                        metadata: savedUserMsg.metadata ? savedUserMsg.metadata as any : msg.metadata
+                    }
+                    : msg
+            ));
+            
+            // 5.5. Update UI with Real Agent Reply (only if bot responded)
             if (agentMsg) {
                 const realAgentMsg: Message = {
                     id: agentMsg.id,
