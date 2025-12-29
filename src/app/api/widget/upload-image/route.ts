@@ -61,13 +61,16 @@ export async function POST(request: NextRequest) {
         }
 
         // Upload to R2
+        // Note: uploadFileToR2 already adds a timestamp prefix, so we just pass the original filename
         let fileUrl: string;
         try {
             fileUrl = await uploadFileToR2(
                 buffer,
-                `${Date.now()}-${file.name}`,
+                file.name, // uploadFileToR2 will add timestamp prefix
                 file.type
             );
+
+            console.log('[UPLOAD] File uploaded successfully, URL:', fileUrl);
 
             if (!fileUrl || fileUrl === '') {
                 console.error('R2 upload returned empty URL');

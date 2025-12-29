@@ -151,6 +151,8 @@ export async function sendWidgetMessage(data: {
         ...(data.metadata || {})
     } : data.metadata;
 
+    console.log('[WIDGET] Saving user message with metadata:', JSON.stringify(messageMetadata));
+
     const userMsg = await prisma.message.create({
         data: {
             conversationId: conversation.id,
@@ -159,6 +161,8 @@ export async function sendWidgetMessage(data: {
             metadata: messageMetadata ? messageMetadata : undefined
         }
     })
+
+    console.log('[WIDGET] User message saved, ID:', userMsg.id, 'metadata:', JSON.stringify(userMsg.metadata));
 
     // 4.5. Check for Intent Detection
     const { detectIntent, executeIntent } = await import('./intent-actions');

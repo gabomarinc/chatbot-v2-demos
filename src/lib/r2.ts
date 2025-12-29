@@ -47,25 +47,24 @@ export async function uploadFileToR2(
             })
         );
 
-        // Construct Public URL (Assuming a custom domain or worker is setup, otherwise use standard R2 dev URL if public)
-        // For now, we'll try to use the public bucket URL if configured, or just the R2 path
-        // Ideally, the user sets up a custom domain like assets.mydomain.com pointing to the bucket
-        // Or we use the R2.dev subdomain if allowed.
-
-        // Let's assume a public access domain env var, or fallback to R2 standard
+        // Construct Public URL
+        // Use R2_PUBLIC_DOMAIN if configured (e.g., https://pub-xxx.r2.dev)
         const publicDomain = process.env.R2_PUBLIC_DOMAIN;
 
+        let finalUrl: string;
         if (publicDomain) {
-            return `${publicDomain}/${key}`;
+            // Remove trailing slash if present
+            const cleanDomain = publicDomain.replace(/\/$/, '');
+            finalUrl = `${cleanDomain}/${key}`;
+        } else {
+            // Fallback: Try to construct R2.dev public URL
+            // Format: https://pub-{account-id}.r2.dev/{key}
+            // Note: This might not work if the bucket doesn't have a public R2.dev subdomain
+            finalUrl = `https://pub-${R2_ACCOUNT_ID}.r2.dev/${key}`;
         }
 
-        // Fallback: If no public domain, we might need pre-signed URLs or assume standard structure
-        // Note: This URL might not work if the bucket is not public. Consider using pre-signed URLs instead.
-        const url = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${key}`;
-        
-        // For now, return the URL even if it might not be publicly accessible
-        // In production, you should use pre-signed URLs or configure a public domain
-        return url;
+        console.log('[R2] Uploaded file, key:', key, 'URL:', finalUrl);
+        return finalUrl;
     } catch (error) {
         console.error('Error uploading to R2:', error);
         throw error; // Re-throw to let caller handle it
