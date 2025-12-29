@@ -325,99 +325,124 @@ INSTRUCCIONES DE EJECUCIÓN:
             }
         ] : [];
 
+        // Try Gemini first if model is Gemini, with fallback to OpenAI
+        let useOpenAI = false;
         if (model.includes('gemini')) {
             // Google Gemini Logic
-            if (!googleKey) throw new Error("Google API Key not configured");
+            console.log('[GEMINI] Attempting to use Gemini model:', model);
+            console.log('[GEMINI] Has googleKey:', !!googleKey, 'Key length:', googleKey?.length || 0);
+            if (!googleKey) {
+                console.error('[GEMINI] Google API Key not configured, falling back to GPT-4o');
+                if (!openaiKey) throw new Error("Neither Google API Key nor OpenAI API Key is configured");
+                useOpenAI = true; // Fallback to OpenAI
+            } else {
+                try {
+                    // Re-instantiate with correct key
+                    console.log('[GEMINI] Initializing GoogleGenerativeAI...');
+                    const currentGenAI = new GoogleGenerativeAI(googleKey);
+                    const geminiModelName = "gemini-1.5-flash";
+                    console.log('[GEMINI] GoogleGenerativeAI initialized, getting model:', geminiModelName);
 
-            // Re-instantiate with correct key
-            const currentGenAI = new GoogleGenerativeAI(googleKey);
-            const geminiModelName = "gemini-1.5-flash";
+                    const geminiTools = hasCalendar ? [{
+                        functionDeclarations: tools.map(t => ({
+                            name: t.name,
+                            description: t.description,
+                            parameters: t.parameters
+                        }))
+                    }] : undefined;
 
-            const geminiTools = hasCalendar ? [{
-                functionDeclarations: tools.map(t => ({
-                    name: t.name,
-                    description: t.description,
-                    parameters: t.parameters
-                }))
-            }] : undefined;
+                    const googleModel = currentGenAI.getGenerativeModel({
+                        model: geminiModelName,
+                        systemInstruction: systemPrompt,
+                        generationConfig: {
+                            temperature: agent.temperature
+                        },
+                        tools: geminiTools as any
+                    });
 
-            const googleModel = currentGenAI.getGenerativeModel({
-                model: geminiModelName,
-                systemInstruction: systemPrompt,
-                generationConfig: {
-                    temperature: agent.temperature
-                },
-                tools: geminiTools as any
-            });
+                    const chatHistory = history.reverse().map((m: Message) => {
+                        const parts: any[] = [{ text: m.role === 'HUMAN' 
+                            ? `[Intervención humana]: ${m.content}`
+                            : m.content }];
+                        
+                        // Add image if present in metadata
+                        if (m.metadata && typeof m.metadata === 'object' && (m.metadata as any).type === 'image' && (m.metadata as any).url) {
+                            // For history, we'll just reference the image in text since we can't load old images easily
+                            parts.push({ text: `[Imagen adjunta: ${(m.metadata as any).url}]` });
+                        }
+                        
+                        return {
+                            role: m.role === 'USER' ? 'user' : 'model',
+                            parts
+                        };
+                    });
 
-            const chatHistory = history.reverse().map((m: Message) => {
-                const parts: any[] = [{ text: m.role === 'HUMAN' 
-                    ? `[Intervención humana]: ${m.content}`
-                    : m.content }];
-                
-                // Add image if present in metadata
-                if (m.metadata && typeof m.metadata === 'object' && (m.metadata as any).type === 'image' && (m.metadata as any).url) {
-                    // For history, we'll just reference the image in text since we can't load old images easily
-                    parts.push({ text: `[Imagen adjunta: ${(m.metadata as any).url}]` });
-                }
-                
-                return {
-                    role: m.role === 'USER' ? 'user' : 'model',
-                    parts
-                };
-            });
+                    const chat = googleModel.startChat({
+                        history: chatHistory,
+                    });
 
-            const chat = googleModel.startChat({
-                history: chatHistory,
-            });
-
-            // Prepare message parts (text + image if present)
-            // For PDFs, the text is already included in messageContent, so just send text
-            const messageParts: any[] = [{ text: messageContent }];
-            
-            if (fileType === 'image' && imageBase64) {
-                // Convert base64 to FileData format for Gemini
-                const base64Data = imageBase64.split(',')[1] || imageBase64; // Remove data:image/...;base64, prefix if present
-                const mimeMatch = imageBase64.match(/data:image\/([^;]+)/);
-                const mimeType = mimeMatch ? mimeMatch[1] : 'jpeg';
-                
-                messageParts.push({
-                    inlineData: {
-                        data: base64Data,
-                        mimeType: `image/${mimeType}`
+                    // Prepare message parts (text + image if present)
+                    // For PDFs, the text is already included in messageContent, so just send text
+                    const messageParts: any[] = [{ text: messageContent }];
+                    
+                    if (fileType === 'image' && imageBase64) {
+                        // Convert base64 to FileData format for Gemini
+                        const base64Data = imageBase64.split(',')[1] || imageBase64; // Remove data:image/...;base64, prefix if present
+                        const mimeMatch = imageBase64.match(/data:image\/([^;]+)/);
+                        const mimeType = mimeMatch ? mimeMatch[1] : 'jpeg';
+                        
+                        messageParts.push({
+                            inlineData: {
+                                data: base64Data,
+                                mimeType: `image/${mimeType}`
+                            }
+                        });
                     }
-                });
-            }
 
-            console.log('[GEMINI] Sending message with', messageParts.length, 'parts');
-            let result = await chat.sendMessage(messageParts);
-            console.log('[GEMINI] Response received');
+                    console.log('[GEMINI] Sending message with', messageParts.length, 'parts');
+                    console.log('[GEMINI] Model:', geminiModelName, 'Has API Key:', !!googleKey);
+                    let result = await chat.sendMessage(messageParts);
+                    console.log('[GEMINI] Response received successfully');
 
-            // Handle tool calls for Gemini
-            let call = result.response.functionCalls()?.[0];
-            while (call) {
-                const { name, args } = call;
-                let toolResult;
-                if (name === "revisar_disponibilidad") {
-                    toolResult = await listAvailableSlots(calendarIntegration.configJson, (args as any).fecha);
-                } else if (name === "agendar_cita") {
-                    toolResult = await createCalendarEvent(calendarIntegration.configJson, args as any);
-                }
+                    // Handle tool calls for Gemini
+                    let call = result.response.functionCalls()?.[0];
+                    while (call) {
+                        const { name, args } = call;
+                        let toolResult;
+                        if (name === "revisar_disponibilidad") {
+                            toolResult = await listAvailableSlots(calendarIntegration.configJson, (args as any).fecha);
+                        } else if (name === "agendar_cita") {
+                            toolResult = await createCalendarEvent(calendarIntegration.configJson, args as any);
+                        }
 
-                result = await chat.sendMessage([{
-                    functionResponse: {
-                        name,
-                        response: { result: toolResult }
+                        result = await chat.sendMessage([{
+                            functionResponse: {
+                                name,
+                                response: { result: toolResult }
+                            }
+                        }]);
+                        call = result.response.functionCalls()?.[0];
                     }
-                }]);
-                call = result.response.functionCalls()?.[0];
+
+                    replyContent = result.response.text();
+                    tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
+                } catch (geminiError: any) {
+                    console.error('[GEMINI] Error calling Gemini API:', geminiError);
+                    console.error('[GEMINI] Error message:', geminiError?.message);
+                    console.error('[GEMINI] Error code:', geminiError?.code);
+                    console.error('[GEMINI] Error status:', geminiError?.status);
+                    console.error('[GEMINI] Falling back to GPT-4o');
+                    
+                    // Fallback to GPT-4o if Gemini fails
+                    if (!openaiKey) throw geminiError; // Re-throw if no OpenAI key available
+                    useOpenAI = true; // Will use OpenAI logic below
+                }
             }
+        }
 
-            replyContent = result.response.text();
-            tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
-
-        } else {
-            // OpenAI Logic (Default)
+        // OpenAI Logic (Default or Fallback from Gemini)
+        if (!model.includes('gemini') || useOpenAI) {
+            // OpenAI Logic (Default or Fallback)
             if (!openaiKey) throw new Error("OpenAI API Key not configured");
 
             const currentOpenAI = new OpenAI({ apiKey: openaiKey });
@@ -600,12 +625,16 @@ INSTRUCCIONES DE EJECUCIÓN:
                 role: 'AGENT',
                 content: errorMessage.includes('credits') 
                     ? "Lo siento, no hay créditos disponibles en este momento. Por favor, contacta al administrador."
-                    : errorMessage.includes('API Key') || errorMessage.includes('not configured')
+                    : errorMessage.includes('API Key') || errorMessage.includes('not configured') || errorMessage.includes('GOOGLE_API_KEY')
                     ? "Error de configuración del servidor. Por favor, contacta al administrador."
-                    : errorMessage.includes('rate limit') || errorMessage.includes('429')
-                    ? "Lo siento, estoy recibiendo demasiadas solicitudes. Por favor, espera un momento e intenta de nuevo."
+                    : errorMessage.includes('rate limit') || errorMessage.includes('429') || errorMessage.includes('quota')
+                    ? "Lo siento, estoy recibiendo demasiadas solicitudes o se ha alcanzado el límite de cuota. Por favor, espera un momento e intenta de nuevo."
                     : errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')
                     ? "Lo siento, la solicitud está tardando demasiado. Por favor, intenta de nuevo."
+                    : errorMessage.includes('permission') || errorMessage.includes('403')
+                    ? "Error de permisos en la API. Por favor, contacta al administrador."
+                    : errorMessage.includes('401') || errorMessage.includes('Unauthorized')
+                    ? "Error de autenticación en la API. Por favor, contacta al administrador."
                     : "Lo siento, estoy teniendo problemas de conexión en este momento. Por favor, intenta de nuevo."
             }
         });
