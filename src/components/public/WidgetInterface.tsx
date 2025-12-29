@@ -292,39 +292,65 @@ export function WidgetInterface({ channel }: WidgetInterfaceProps) {
                                 style={!isUser ? { backgroundColor: primaryColor } : {}}
                             >
                                 {/* Show image if present */}
-                                {msg.metadata?.type === 'image' && msg.metadata?.url && (
-                                    <div className="mb-2 rounded-xl overflow-hidden max-w-xs">
-                                        <img 
-                                            src={msg.metadata.url} 
-                                            alt="Imagen adjunta"
-                                            className="w-full h-auto object-contain"
-                                        />
-                                    </div>
-                                )}
+                                {(() => {
+                                    const metadata = msg.metadata;
+                                    // Handle both object and parsed JSON
+                                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                    const imageType = metadataObj?.type;
+                                    const imageUrl = metadataObj?.url;
+                                    
+                                    if (imageType === 'image' && imageUrl) {
+                                        return (
+                                            <div className="mb-2 rounded-xl overflow-hidden max-w-xs">
+                                                <img 
+                                                    src={imageUrl} 
+                                                    alt="Imagen adjunta"
+                                                    className="w-full h-auto object-contain"
+                                                    onError={(e) => {
+                                                        console.error('Error loading image:', imageUrl);
+                                                        (e.target as HTMLImageElement).style.display = 'none';
+                                                    }}
+                                                />
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
                                 
                                 {/* Show PDF link if present */}
-                                {msg.metadata?.type === 'pdf' && msg.metadata?.url && (
-                                    <div className="mb-2 p-3 bg-gray-50 rounded-xl border border-gray-200 max-w-xs">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                                            </svg>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-medium text-gray-700 truncate">
-                                                    {msg.metadata.fileName || 'Documento PDF'}
-                                                </p>
-                                                <a 
-                                                    href={msg.metadata.url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                                >
-                                                    Ver/Descargar PDF
-                                                </a>
+                                {(() => {
+                                    const metadata = msg.metadata;
+                                    // Handle both object and parsed JSON
+                                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                    const pdfType = metadataObj?.type;
+                                    const pdfUrl = metadataObj?.url;
+                                    
+                                    if (pdfType === 'pdf' && pdfUrl) {
+                                        return (
+                                            <div className="mb-2 p-3 bg-gray-50 rounded-xl border border-gray-200 max-w-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-medium text-gray-700 truncate">
+                                                            {metadataObj.fileName || 'Documento PDF'}
+                                                        </p>
+                                                        <a 
+                                                            href={pdfUrl} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                                        >
+                                                            Ver/Descargar PDF
+                                                        </a>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                )}
+                                        );
+                                    }
+                                    return null;
+                                })()}
                                 <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                                 <span className={cn(
                                     "text-[10px] block mt-1 font-medium opacity-70",

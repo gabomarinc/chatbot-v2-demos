@@ -108,8 +108,15 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
         setIsLoadingMessages(true);
         try {
             const msgs = await getChatMessages(id);
-            // Transform date strings to Date objects if needed
-            setMessages(msgs.map(m => ({ ...m, createdAt: new Date(m.createdAt) })) as any);
+            // Transform date strings to Date objects if needed and log metadata for debugging
+            const transformedMessages = msgs.map(m => {
+                // Log metadata to help debug image display issues
+                if (m.metadata) {
+                    console.log('[ChatInterface] Message metadata:', m.id, m.metadata);
+                }
+                return { ...m, createdAt: new Date(m.createdAt) };
+            }) as any;
+            setMessages(transformedMessages);
         } catch (error) {
             console.error('Failed to load messages:', error);
         } finally {
@@ -279,46 +286,81 @@ export function ChatInterface({ initialConversations, initialConversationId, tea
                                                     : "bg-white text-gray-800 border border-gray-100 rounded-[1.25rem] rounded-tl-none"
                                             )}>
                                                 {/* Show image if present */}
-                                                {msg.metadata?.type === 'image' && msg.metadata?.url && (
-                                                    <div className="mb-3 rounded-xl overflow-hidden max-w-full">
-                                                        <img 
-                                                            src={msg.metadata.url} 
-                                                            alt="Imagen adjunta"
-                                                            className="w-full h-auto object-contain max-h-64 rounded-lg"
-                                                        />
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const metadata = msg.metadata;
+                                                    // Handle both object and parsed JSON
+                                                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                                    const imageType = metadataObj?.type;
+                                                    const imageUrl = metadataObj?.url;
+                                                    
+                                                    if (imageType === 'image' && imageUrl) {
+                                                        return (
+                                                            <div className="mb-3 rounded-xl overflow-hidden max-w-full">
+                                                                <img 
+                                                                    src={imageUrl} 
+                                                                    alt="Imagen adjunta"
+                                                                    className="w-full h-auto object-contain max-h-64 rounded-lg"
+                                                                    onError={(e) => {
+                                                                        console.error('Error loading image:', imageUrl);
+                                                                        (e.target as HTMLImageElement).style.display = 'none';
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                                 
                                                 {/* Show PDF link if present */}
-                                                {msg.metadata?.type === 'pdf' && msg.metadata?.url && (
-                                                    <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                                                            </svg>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-xs font-medium text-gray-700 truncate">
-                                                                    {msg.metadata.fileName || 'Documento PDF'}
-                                                                </p>
-                                                                <a 
-                                                                    href={msg.metadata.url} 
-                                                                    target="_blank" 
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                                                >
-                                                                    Ver/Descargar PDF
-                                                                </a>
+                                                {(() => {
+                                                    const metadata = msg.metadata;
+                                                    // Handle both object and parsed JSON
+                                                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                                    const pdfType = metadataObj?.type;
+                                                    const pdfUrl = metadataObj?.url;
+                                                    
+                                                    if (pdfType === 'pdf' && pdfUrl) {
+                                                        return (
+                                                            <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-xs font-medium text-gray-700 truncate">
+                                                                            {metadataObj.fileName || 'Documento PDF'}
+                                                                        </p>
+                                                                        <a 
+                                                                            href={pdfUrl} 
+                                                                            target="_blank" 
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                                                        >
+                                                                            Ver/Descargar PDF
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                                 
                                                 {/* Message content */}
-                                                {msg.content && (
-                                                    <div className={msg.metadata?.type ? 'mt-2' : ''}>
-                                                        {msg.content}
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const metadata = msg.metadata;
+                                                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                                    const hasMetadata = metadataObj?.type;
+                                                    
+                                                    if (msg.content) {
+                                                        return (
+                                                            <div className={hasMetadata ? 'mt-2' : ''}>
+                                                                {msg.content}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </div>
                                             <div className={cn(
                                                 "flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider",
