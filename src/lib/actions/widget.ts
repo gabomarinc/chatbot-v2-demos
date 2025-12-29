@@ -199,9 +199,21 @@ export async function sendWidgetMessage(data: {
         let replyContent = '...';
         let tokensUsed = 0;
         // Determine model to use: gpt-4o for images (has vision), otherwise use agent's configured model
+        // IMPORTANT: gpt-4o-mini does NOT support vision, so we MUST use gpt-4o if there's an image
         let modelUsedForLogging = model; // Default to agent's model
-        if (!model.includes('gemini') && fileType === 'image' && imageBase64) {
-            modelUsedForLogging = 'gpt-4o'; // Override for images when using OpenAI
+        console.log('[MODEL SELECTION] Agent model:', model, 'fileType:', fileType, 'has imageBase64:', !!imageBase64, 'has fileUrl:', !!fileUrl);
+        
+        // If there's an image (even if base64 conversion failed), we need gpt-4o (gpt-4o-mini doesn't support vision)
+        if (!model.includes('gemini') && fileType === 'image') {
+            if (model === 'gpt-4o-mini') {
+                console.log('[MODEL SELECTION] gpt-4o-mini does not support vision, forcing gpt-4o');
+                modelUsedForLogging = 'gpt-4o'; // Force gpt-4o for images (gpt-4o-mini doesn't support vision)
+            } else if (imageBase64) {
+                modelUsedForLogging = 'gpt-4o'; // Override for images when using OpenAI
+                console.log('[MODEL SELECTION] Overriding to gpt-4o for image processing');
+            }
+        } else {
+            console.log('[MODEL SELECTION] Using agent model:', modelUsedForLogging);
         }
 
         // 5.1 Retrieve Context (RAG) - Optional, don't fail if it errors
