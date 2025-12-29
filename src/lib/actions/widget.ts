@@ -327,6 +327,7 @@ INSTRUCCIONES DE EJECUCIÓN:
 
         // Try Gemini first if model is Gemini, with fallback to OpenAI
         let useOpenAI = false;
+        let fallbackModel = 'gpt-4o'; // Default fallback model
         if (model.includes('gemini')) {
             // Google Gemini Logic
             console.log('[GEMINI] Attempting to use Gemini model:', model);
@@ -335,12 +336,23 @@ INSTRUCCIONES DE EJECUCIÓN:
                 console.error('[GEMINI] Google API Key not configured, falling back to GPT-4o');
                 if (!openaiKey) throw new Error("Neither Google API Key nor OpenAI API Key is configured");
                 useOpenAI = true; // Fallback to OpenAI
+                modelUsedForLogging = fallbackModel; // Update model for logging
             } else {
                 try {
                     // Re-instantiate with correct key
                     console.log('[GEMINI] Initializing GoogleGenerativeAI...');
                     const currentGenAI = new GoogleGenerativeAI(googleKey);
-                    const geminiModelName = "gemini-1.5-flash";
+                    // Map model names to correct API model identifiers
+                    // According to Google's API documentation, model names may need version suffix
+                    // Try gemini-1.5-flash-001 or gemini-1.5-flash-latest if standard name fails
+                    let geminiModelName = model;
+                    if (model === 'gemini-1.5-flash') {
+                        // Try with version suffix first (more stable)
+                        geminiModelName = 'gemini-1.5-flash-001';
+                    } else if (model === 'gemini-1.5-pro') {
+                        geminiModelName = 'gemini-1.5-pro-001';
+                    }
+                    console.log('[GEMINI] Using model name:', geminiModelName);
                     console.log('[GEMINI] GoogleGenerativeAI initialized, getting model:', geminiModelName);
 
                     const geminiTools = hasCalendar ? [{
@@ -436,6 +448,8 @@ INSTRUCCIONES DE EJECUCIÓN:
                     // Fallback to GPT-4o if Gemini fails
                     if (!openaiKey) throw geminiError; // Re-throw if no OpenAI key available
                     useOpenAI = true; // Will use OpenAI logic below
+                    modelUsedForLogging = fallbackModel; // Update model for OpenAI fallback and logging
+                    console.log('[GEMINI] Updated modelUsedForLogging to:', modelUsedForLogging);
                 }
             }
         }
@@ -496,7 +510,19 @@ INSTRUCCIONES DE EJECUCIÓN:
 
             // Use gpt-4o for images (has vision), otherwise use agent's configured model
             // Note: If model is gpt-4o-mini and it fails, we'll fallback to gpt-4o
-            const modelToUse = modelUsedForLogging;
+            // If we're falling back from Gemini, use gpt-4o
+            let modelToUse = modelUsedForLogging;
+            if (useOpenAI && model.includes('gemini')) {
+                // We're falling back from Gemini, use gpt-4o
+                modelToUse = fallbackModel;
+                console.log('[OPENAI] Fallback from Gemini, using model:', modelToUse);
+            }
+            
+            // Safety check: Never use a Gemini model name with OpenAI
+            if (modelToUse.includes('gemini')) {
+                console.warn('[OPENAI] Detected Gemini model name in OpenAI call, forcing fallback to gpt-4o');
+                modelToUse = fallbackModel;
+            }
             
             console.log('[OPENAI] Sending request with model:', modelToUse, 'messages:', openAiMessages.length);
             let completion;
