@@ -564,18 +564,55 @@ export async function createChannel(data: any) {
     })
 
     revalidatePath('/channels')
+    revalidatePath('/agents')
     return channel
 }
 
 export async function updateChannel(channelId: string, data: any) {
-    // Basic implementation
-    const channel = await prisma.channel.update({
+    const workspace = await getUserWorkspace()
+    if (!workspace) throw new Error("Unauthorized")
+
+    // Verify channel belongs to workspace
+    const channel = await prisma.channel.findFirst({
+        where: {
+            id: channelId,
+            agent: { workspaceId: workspace.id }
+        }
+    })
+
+    if (!channel) throw new Error("Channel not found or unauthorized")
+
+    const updatedChannel = await prisma.channel.update({
         where: { id: channelId },
         data
     })
 
     revalidatePath('/channels')
-    return channel
+    revalidatePath('/agents')
+    return updatedChannel
+}
+
+export async function deleteChannel(channelId: string) {
+    const workspace = await getUserWorkspace()
+    if (!workspace) throw new Error("Unauthorized")
+
+    // Verify channel belongs to workspace
+    const channel = await prisma.channel.findFirst({
+        where: {
+            id: channelId,
+            agent: { workspaceId: workspace.id }
+        }
+    })
+
+    if (!channel) throw new Error("Channel not found or unauthorized")
+
+    // Delete channel (conversations will be handled by cascade or kept with null channelId)
+    await prisma.channel.delete({
+        where: { id: channelId }
+    })
+
+    revalidatePath('/channels')
+    revalidatePath('/agents')
 }
 
 export async function getConversations() {

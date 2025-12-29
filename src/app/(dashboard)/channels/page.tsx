@@ -3,6 +3,7 @@ import { Plus, Search, Filter, Smartphone, MessageSquare, Globe, Instagram, Send
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { NewChannelButton } from '@/components/channels/NewChannelButton';
+import { DeleteChannelButton } from '@/components/channels/DeleteChannelButton';
 
 export default async function ChannelsPage() {
     const channels = await getChannels();
@@ -73,9 +74,10 @@ export default async function ChannelsPage() {
                                 >
                                     Configurar
                                 </Link>
-                                <button className="p-2 hover:bg-gray-50 rounded-xl transition-colors text-gray-400">
-                                    <MoreVertical className="w-5 h-5" />
-                                </button>
+                                <DeleteChannelButton 
+                                    channelId={channel.id}
+                                    channelName={channel.displayName}
+                                />
                             </div>
                         </div>
                     ))

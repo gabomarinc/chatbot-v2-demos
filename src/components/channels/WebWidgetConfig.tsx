@@ -21,6 +21,7 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+    const [createdChannel, setCreatedChannel] = useState<any>(existingChannel || null);
 
     // Initial State defaults
     // If defaultAgentId is provided, use it; otherwise use existing channel's agent or first agent
@@ -52,14 +53,18 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                 }
             };
 
-            if (existingChannel) {
-                await updateChannel(existingChannel.id, {
+            let savedChannel;
+            if (existingChannel || createdChannel) {
+                const channelId = existingChannel?.id || createdChannel?.id;
+                savedChannel = await updateChannel(channelId, {
                     displayName: formData.displayName,
                     configJson: payload.configJson,
                     isActive: true // Ensure channel is active when saving
                 });
+                setCreatedChannel(savedChannel);
             } else {
-                await createChannel(payload);
+                savedChannel = await createChannel(payload);
+                setCreatedChannel(savedChannel); // Store the newly created channel
             }
 
             setIsSaved(true);
@@ -73,8 +78,10 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
         }
     };
 
-    const embedCode = existingChannel
-        ? `<script src="${window.location.origin}/widget.js" data-channel-id="${existingChannel.id}"></script>`
+    // Use createdChannel if available, otherwise use existingChannel
+    const currentChannel = createdChannel || existingChannel;
+    const embedCode = currentChannel
+        ? `<script src="${window.location.origin}/widget.js" data-channel-id="${currentChannel.id}"></script>`
         : 'Guarda el canal para generar el código.';
 
     const copyToClipboard = () => {
@@ -99,7 +106,7 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-gray-700 ml-1">Agente Responsable</label>
                             <select
-                                disabled={!!existingChannel}
+                                disabled={!!(existingChannel || createdChannel)}
                                 value={formData.agentId}
                                 onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
                                 className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-[#21AC96]/5 focus:bg-white focus:border-[#21AC96] transition-all font-medium appearance-none cursor-pointer disabled:opacity-50"
@@ -108,7 +115,7 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                                     <option key={agent.id} value={agent.id}>{agent.name}</option>
                                 ))}
                             </select>
-                            {existingChannel && <p className="text-xs text-gray-400 ml-1">El agente no se puede cambiar una vez creado el canal.</p>}
+                            {(existingChannel || createdChannel) && <p className="text-xs text-gray-400 ml-1">El agente no se puede cambiar una vez creado el canal.</p>}
                         </div>
 
                         <div className="space-y-2">
@@ -239,8 +246,8 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                     <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px] mt-8 z-10">Vista Previa en Vivo</p>
                 </div>
 
-                {/* Integration Code */}
-                {existingChannel && (
+                                {/* Integration Code */}
+                {currentChannel && (
                     <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-xl space-y-4 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#21AC96] opacity-10 blur-3xl rounded-full"></div>
                         <div className="flex items-center gap-3 mb-2 text-white">
@@ -257,7 +264,7 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                                     </code>
                                     <button
                                         onClick={() => {
-                                            if (!existingChannel) return;
+                                            if (!currentChannel) return;
                                             navigator.clipboard.writeText(embedCode);
                                             alert('Script copiado');
                                         }}
@@ -278,7 +285,7 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                                 <div className="relative bg-slate-950 rounded-2xl p-4 border border-slate-800">
                                     <code className="text-xs text-slate-300 font-mono break-all block leading-relaxed">
                                         {`<iframe
-  src="${window.location.origin}/widget/${existingChannel.id}"
+  src="${window.location.origin}/widget/${currentChannel.id}"
   width="100%"
   height="600"
   frameborder="0"
@@ -286,8 +293,8 @@ export function WebWidgetConfig({ agents, existingChannel, defaultAgentId }: Web
                                     </code>
                                     <button
                                         onClick={() => {
-                                            if (!existingChannel) return;
-                                            const iframeCode = `<iframe src="${window.location.origin}/widget/${existingChannel.id}" width="100%" height="600" frameborder="0"></iframe>`;
+                                            if (!currentChannel) return;
+                                            const iframeCode = `<iframe src="${window.location.origin}/widget/${currentChannel.id}" width="100%" height="600" frameborder="0"></iframe>`;
                                             navigator.clipboard.writeText(iframeCode);
                                             alert('Iframe copiado');
                                         }}
