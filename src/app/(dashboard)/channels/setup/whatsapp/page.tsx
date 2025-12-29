@@ -4,6 +4,9 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 
+// Force dynamic rendering to always get fresh agents list
+export const dynamic = 'force-dynamic';
+
 export default async function WhatsAppSetupPage({ 
     searchParams 
 }: { 

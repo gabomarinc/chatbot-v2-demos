@@ -4,6 +4,9 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+// Force dynamic rendering to always get fresh agents list
+export const dynamic = 'force-dynamic';
+
 export default async function WebWidgetSetupPage({ 
     searchParams 
 }: { 
