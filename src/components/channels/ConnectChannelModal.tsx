@@ -55,8 +55,8 @@ export function ConnectChannelModal({ isOpen, onClose, agentId }: ConnectChannel
             description: 'DM y Comentarios',
             color: 'bg-pink-500',
             textColor: 'text-pink-600',
-            href: '#',
-            enabled: false
+            href: '/channels/setup/instagram',
+            enabled: true
         },
         {
             id: 'messenger',
