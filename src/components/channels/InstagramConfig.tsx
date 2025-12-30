@@ -6,6 +6,8 @@ import { Loader2, Instagram, ShieldCheck, Key, Link2, Copy, ExternalLink, CheckC
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { InstagramEmbeddedSignup } from './InstagramEmbeddedSignup';
+
 interface Agent {
     id: string;
     name: string;
@@ -15,12 +17,14 @@ interface InstagramConfigProps {
     agents: Agent[];
     existingChannel?: any;
     defaultAgentId?: string;
+    metaAppId?: string;
 }
 
-export function InstagramConfig({ agents, existingChannel, defaultAgentId }: InstagramConfigProps) {
+export function InstagramConfig({ agents, existingChannel, defaultAgentId, metaAppId }: InstagramConfigProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+    const [showManual, setShowManual] = useState(false);
 
     const [formData, setFormData] = useState({
         agentId: existingChannel?.agentId || defaultAgentId || (agents.length > 0 ? agents[0].id : ''),
@@ -73,6 +77,50 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId }: Ins
     };
 
     const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/instagram`;
+
+    // Automatic Setup Mode (Default if App ID exists)
+    if (metaAppId && !showManual) {
+        return (
+            <div className="animate-fade-in space-y-8">
+                <InstagramEmbeddedSignup
+                    appId={metaAppId}
+                    agentId={formData.agentId}
+                    onSuccess={() => {
+                        router.refresh();
+                        setIsSaved(true);
+                    }}
+                />
+
+                <div className="text-center">
+                    <button
+                        onClick={() => setShowManual(true)}
+                        className="text-gray-400 text-xs font-bold hover:text-gray-600 uppercase tracking-widest transition-colors"
+                    >
+                        Configurar Manualmente (Avanzado)
+                    </button>
+                </div>
+
+                {/* Show Agent Selector even in Auto Mode if there are multiple agents */}
+                {agents.length > 1 && (
+                    <div className="max-w-md mx-auto">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block text-center">
+                            Agente que responderá
+                        </label>
+                        <select
+                            disabled={!!existingChannel}
+                            value={formData.agentId}
+                            onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
+                            className="w-full px-5 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-pink-500/5 transition-all font-medium appearance-none cursor-pointer text-center"
+                        >
+                            {agents.map(agent => (
+                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-fade-in">
@@ -207,6 +255,17 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId }: Ins
                         <span>{existingChannel ? 'Actualizar Configuración' : 'Activar Canal Instagram'}</span>
                     )}
                 </button>
+
+                {metaAppId && (
+                    <div className="text-center pt-2">
+                        <button
+                            onClick={() => setShowManual(false)}
+                            className="text-pink-600 text-xs font-bold hover:text-pink-700 uppercase tracking-widest transition-colors"
+                        >
+                            ← Volver a Conexión Automática
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Guide Column */}
