@@ -18,10 +18,14 @@ export async function GET(req: NextRequest) {
                 where: { type: 'INSTAGRAM', isActive: true }
             });
 
-            const isValid = channels.some(c => {
+            // Allow verification if ANY channel matches OR if using the Master Token
+            // This decouples Platform Setup from having active users
+            const MASTER_TOKEN = 'konsul_master_verify_secret';
+
+            const isValid = token === MASTER_TOKEN || channels.some(c => {
                 const config = c.configJson as any;
                 return config?.verifyToken === token;
-            }) || token === process.env.INSTAGRAM_VERIFY_TOKEN;
+            });
 
             if (isValid) {
                 console.log('INSTAGRAM WEBHOOK_VERIFIED');
