@@ -168,7 +168,12 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
         try {
             // Capture current URL to use as redirect_uri
             // Remove hash and query params to be safe, as FB SDK usually does
-            const currentUrl = window.location.origin + window.location.pathname;
+            let currentUrl = window.location.origin + window.location.pathname;
+            // Facebook SDK often strips trailing slash, so let's do it too to be safe
+            if (currentUrl.endsWith('/')) {
+                currentUrl = currentUrl.slice(0, -1);
+            }
+            console.log('Sending redirect_uri for validation:', currentUrl);
             const result = await handleEmbeddedSignup({ code, agentId, currentUrl });
             if (result.success) {
                 toast.success('¡WhatsApp conectado correctamente!');
