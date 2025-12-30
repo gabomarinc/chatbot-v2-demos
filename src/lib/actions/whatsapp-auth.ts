@@ -13,6 +13,7 @@ const META_API_VERSION = 'v21.0';
 export async function handleEmbeddedSignup(data: {
     code: string;
     agentId: string;
+    currentUrl?: string;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
@@ -30,7 +31,7 @@ export async function handleEmbeddedSignup(data: {
         // Para Embedded Signup, no necesitamos redirect_uri en el intercambio
         // POST /v21.0/oauth/access_token?client_id={app-id}&client_secret={app-secret}&code={code}
         const tokenRes = await fetch(
-            `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${data.code}`
+            `https://graph.facebook.com/${META_API_VERSION}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${data.code}&redirect_uri=${data.currentUrl || ''}`
         );
         const tokenData = await tokenRes.json();
 

@@ -43,7 +43,7 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
                         clearInterval(checkFB);
                     }
                 }, 100);
-                
+
                 // Timeout después de 5 segundos
                 setTimeout(() => {
                     clearInterval(checkFB);
@@ -73,7 +73,7 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
             script.src = "https://connect.facebook.net/en_US/sdk.js";
             script.async = true;
             script.defer = true;
-            
+
             script.onload = () => {
                 console.log('Script de Facebook SDK cargado');
                 // El SDK debería llamar a fbAsyncInit automáticamente
@@ -84,12 +84,12 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
                     }
                 }, 1000);
             };
-            
+
             script.onerror = (error) => {
                 console.error('Error al cargar el SDK de Facebook:', error);
                 toast.error('Error al cargar el SDK de Facebook. Verifica tu conexión o desactiva bloqueadores de anuncios.');
             };
-            
+
             document.body.appendChild(script);
 
             // Timeout de seguridad: si después de 10 segundos no se cargó, mostrar advertencia
@@ -122,7 +122,7 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
 
         try {
             console.log('Iniciando FB.login con config:', { configId, appId });
-            
+
             // Para Embedded Signup con config_id, no necesitamos redirect_uri explícito
             // Meta maneja el redirect internamente cuando se usa config_id
             const loginOptions: any = {
@@ -130,12 +130,12 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
                 override_default_response_type: true,
                 scope: 'whatsapp_business_management,whatsapp_business_messaging',
             };
-            
+
             // Solo agregar config_id si está disponible
             if (configId) {
                 loginOptions.config_id = configId;
             }
-            
+
             window.FB.login((response: any) => {
                 console.log('Respuesta de FB.login:', response);
                 if (response.authResponse) {
@@ -166,7 +166,10 @@ export function WhatsAppEmbeddedSignup({ appId, agentId, configId, onSuccess }: 
 
     const processMetaCode = async (code: string) => {
         try {
-            const result = await handleEmbeddedSignup({ code, agentId });
+            // Capture current URL to use as redirect_uri
+            // Remove hash and query params to be safe, as FB SDK usually does
+            const currentUrl = window.location.origin + window.location.pathname;
+            const result = await handleEmbeddedSignup({ code, agentId, currentUrl });
             if (result.success) {
                 toast.success('¡WhatsApp conectado correctamente!');
                 if (onSuccess) onSuccess();
