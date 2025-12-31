@@ -65,8 +65,8 @@ export function ConnectChannelModal({ isOpen, onClose, agentId }: ConnectChannel
             description: 'Facebook Messenger',
             color: 'bg-blue-500',
             textColor: 'text-blue-600',
-            href: '#',
-            enabled: false
+            href: '/channels/setup/messenger',
+            enabled: true
         }
     ];
 
