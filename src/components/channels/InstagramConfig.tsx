@@ -82,6 +82,32 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId, metaA
     if (metaAppId && !showManual) {
         return (
             <div className="animate-fade-in space-y-8">
+                {/* 1. Agent Selector (FIRST) */}
+                <div className="max-w-md mx-auto mb-8">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block text-center">
+                        Agente que responderá
+                    </label>
+                    <div className="relative">
+                        <select
+                            disabled={!!existingChannel}
+                            value={formData.agentId}
+                            onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
+                            className="w-full px-5 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-pink-500/5 transition-all font-medium appearance-none cursor-pointer text-center pr-10 shadow-sm hover:border-pink-200"
+                        >
+                            {agents.map(agent => (
+                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                            ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-center mt-2 max-w-xs mx-auto">
+                        Este agente procesará automáticamente todos los mensajes que lleguen a la cuenta conectada.
+                    </p>
+                </div>
+
+                {/* 2. Embedded Signup (SECOND) */}
                 <InstagramEmbeddedSignup
                     appId={metaAppId}
                     agentId={formData.agentId}
@@ -90,34 +116,6 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId, metaA
                         setIsSaved(true);
                     }}
                 />
-
-                <div className="text-center">
-                    <button
-                        onClick={() => setShowManual(true)}
-                        className="text-gray-400 text-xs font-bold hover:text-gray-600 uppercase tracking-widest transition-colors"
-                    >
-                        Configurar Manualmente (Avanzado)
-                    </button>
-                </div>
-
-                {/* Show Agent Selector even in Auto Mode if there are multiple agents */}
-                {agents.length > 1 && (
-                    <div className="max-w-md mx-auto">
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block text-center">
-                            Agente que responderá
-                        </label>
-                        <select
-                            disabled={!!existingChannel}
-                            value={formData.agentId}
-                            onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
-                            className="w-full px-5 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-pink-500/5 transition-all font-medium appearance-none cursor-pointer text-center"
-                        >
-                            {agents.map(agent => (
-                                <option key={agent.id} value={agent.id}>{agent.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
             </div>
         );
     }
