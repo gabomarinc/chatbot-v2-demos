@@ -84,7 +84,7 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId, metaA
             <div className="animate-fade-in space-y-8">
                 {/* 1. Agent Selector (FIRST) */}
                 <div className="max-w-md mx-auto mb-8">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block text-center">
+                    <label className="text-sm font-extrabold text-gray-700 uppercase tracking-widest mb-3 block text-center">
                         Agente que responderá
                     </label>
                     <div className="relative">
@@ -92,17 +92,17 @@ export function InstagramConfig({ agents, existingChannel, defaultAgentId, metaA
                             disabled={!!existingChannel}
                             value={formData.agentId}
                             onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
-                            className="w-full px-5 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-pink-500/5 transition-all font-medium appearance-none cursor-pointer text-center pr-10 shadow-sm hover:border-pink-200"
+                            className="w-full px-5 py-4 bg-emerald-50/50 border-2 border-emerald-100 rounded-2xl text-emerald-900 font-bold text-base focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all appearance-none cursor-pointer text-center pr-10 shadow-sm hover:border-emerald-300 hover:bg-emerald-50"
                         >
                             {agents.map(agent => (
-                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                <option key={agent.id} value={agent.id} className="bg-white text-gray-900">{agent.name}</option>
                             ))}
                         </select>
-                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-emerald-500">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 text-center mt-2 max-w-xs mx-auto">
+                    <p className="text-[11px] text-gray-400 text-center mt-3 max-w-xs mx-auto font-medium">
                         Este agente procesará automáticamente todos los mensajes que lleguen a la cuenta conectada.
                     </p>
                 </div>
