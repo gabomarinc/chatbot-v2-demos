@@ -53,7 +53,8 @@ export function WhatsAppConfig({ agents, existingChannel, metaAppId, defaultAgen
                     phoneNumberId: formData.phoneNumberId,
                     wabaId: formData.wabaId,
                     verifyToken: formData.verifyToken
-                }
+                },
+                isActive: true
             };
 
             if (existingChannel) {
