@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/prisma';
 import { getAgents } from '@/lib/actions/dashboard';
 import { MessengerConfig } from '@/components/channels/MessengerConfig';
 
@@ -9,12 +10,20 @@ export default async function MessengerSetupPage({
     const agents = await getAgents();
     const { agentId, channelId } = searchParams;
 
+    const metaAppIdConfig = await prisma.globalConfig.findUnique({
+        where: { key: 'META_APP_ID' }
+    });
+
+    // Explicitly handle null/undefined value
+    const metaAppId = metaAppIdConfig?.value || undefined;
+
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-10">
             <MessengerConfig
                 agents={agents}
                 initialAgentId={agentId}
                 initialChannelId={channelId}
+                metaAppId={metaAppId}
             />
         </div>
     );

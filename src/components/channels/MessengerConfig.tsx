@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Copy, Check, Info, AlertTriangle, ArrowRight, MessageCircle } from 'lucide-react';
+import { Loader2, Copy, Check, Info, ArrowRight, MessageCircle, Settings2 } from 'lucide-react';
 import { createChannel, updateChannel, getChannels } from '@/lib/actions/dashboard';
+import { MessengerEmbeddedSignup } from './MessengerEmbeddedSignup';
 
 interface Agent {
     id: string;
@@ -15,16 +16,18 @@ interface MessengerConfigProps {
     agents: Agent[];
     initialAgentId?: string;
     initialChannelId?: string;
+    metaAppId?: string;
 }
 
-export function MessengerConfig({ agents, initialAgentId, initialChannelId }: MessengerConfigProps) {
+export function MessengerConfig({ agents, initialAgentId, initialChannelId, metaAppId }: MessengerConfigProps) {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [showManual, setShowManual] = useState(false);
 
     const [formData, setFormData] = useState({
-        agentId: initialAgentId || '',
+        agentId: initialAgentId || (agents.length > 0 ? agents[0].id : ''),
         displayName: '',
         pageAccessToken: '',
         pageId: '',
@@ -39,21 +42,20 @@ export function MessengerConfig({ agents, initialAgentId, initialChannelId }: Me
             if (initialChannelId) {
                 setIsLoading(true);
                 try {
-                    // Logic to fetch specific channel would go here if we had a direct fetch action
-                    // For now, fetching all and filtering (efficient enough for dashboard)
                     const channels = await getChannels();
                     const channel = channels.find(c => c.id === initialChannelId);
 
                     if (channel) {
                         setExistingChannel(channel);
                         const config = channel.configJson as any;
-                        setFormData({
+                        setFormData(prev => ({
+                            ...prev,
                             agentId: channel.agentId,
                             displayName: channel.displayName,
                             pageAccessToken: config?.pageAccessToken || '',
                             pageId: config?.pageId || '',
-                            verifyToken: config?.verifyToken || formData.verifyToken,
-                        });
+                            verifyToken: config?.verifyToken || prev.verifyToken,
+                        }));
                     }
                 } catch (error) {
                     console.error('Error loading channel:', error);
@@ -132,6 +134,68 @@ export function MessengerConfig({ agents, initialAgentId, initialChannelId }: Me
         );
     }
 
+    // Automatic Setup Mode (Default if App ID exists and Manual Mode not requested)
+    if (metaAppId && !showManual && !existingChannel) {
+        return (
+            <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-[2.5rem] p-8 md:p-12 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-fullblur-[80px] -mr-32 -mt-32 group-hover:scale-150 transition-transform duration-1000"></div>
+                    <div className="relative z-10 text-center">
+                        <div className="inline-flex items-center justify-center p-4 bg-white/20 backdrop-blur-md rounded-3xl mb-6 shadow-inner">
+                            <MessageCircle className="w-12 h-12 text-white" />
+                        </div>
+                        <h2 className="text-4xl font-black tracking-tight text-white mb-4">Conectar Messenger</h2>
+                        <p className="text-blue-50 text-xl font-medium max-w-xl mx-auto leading-relaxed">
+                            Vincula tu Página de Facebook en un clic para automatizar tus respuestas con IA.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Agent Selector */}
+                <div className="max-w-md mx-auto">
+                    <label className="text-sm font-extrabold text-gray-400 uppercase tracking-widest mb-3 block text-center">
+                        Agente Responsable
+                    </label>
+                    <div className="relative">
+                        <select
+                            value={formData.agentId}
+                            onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
+                            className="w-full px-5 py-4 bg-white border-2 border-gray-100 rounded-2xl text-gray-900 font-bold text-lg focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all appearance-none cursor-pointer text-center pr-10 hover:border-blue-200 shadow-sm"
+                        >
+                            {agents.map(agent => (
+                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                            ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
+                            <ArrowRight className="w-5 h-5 rotate-90" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Embedded Signup Button */}
+                <div className="max-w-md mx-auto">
+                    <MessengerEmbeddedSignup
+                        appId={metaAppId}
+                        agentId={formData.agentId}
+                        onSuccess={() => router.refresh()}
+                    />
+                </div>
+
+                {/* Manual Link */}
+                <div className="text-center pt-8">
+                    <button
+                        onClick={() => setShowManual(true)}
+                        className="text-gray-400 text-xs font-bold hover:text-blue-600 uppercase tracking-widest transition-colors flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full hover:bg-blue-50"
+                    >
+                        <Settings2 className="w-4 h-4" />
+                        Configuración Manual Avanzada
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
             {/* Header */}
@@ -146,13 +210,13 @@ export function MessengerConfig({ agents, initialAgentId, initialChannelId }: Me
                         <div>
                             <h2 className="text-3xl font-black tracking-tight text-white mb-2">Facebook Messenger</h2>
                             <div className="flex items-center gap-2 text-blue-100 font-medium">
-                                <span className="px-2 py-0.5 rounded-md bg-blue-500/50 border border-blue-400/50 text-xs font-bold uppercase tracking-wider">BETA</span>
-                                <span>Integración Oficial</span>
+                                <span className="px-2 py-0.5 rounded-md bg-blue-500/50 border border-blue-400/50 text-xs font-bold uppercase tracking-wider">OFFICIAL API</span>
+                                <span>Integración Manual</span>
                             </div>
                         </div>
                     </div>
                     <p className="text-blue-50 text-lg max-w-2xl font-medium leading-relaxed">
-                        Conecta tu Página de Facebook para recibir y responder mensajes automáticamente usando tus agentes de IA.
+                        Conecta tu Página de Facebook manualmente usando el Page & Token ID.
                     </p>
                 </div>
             </div>
@@ -261,6 +325,18 @@ export function MessengerConfig({ agents, initialAgentId, initialChannelId }: Me
                             )}
                         </button>
                     </form>
+
+                    {/* Back to Simple Mode Link */}
+                    {metaAppId && !existingChannel && (
+                        <div className="text-center">
+                            <button
+                                onClick={() => setShowManual(false)}
+                                className="text-blue-600 text-xs font-bold hover:text-blue-700 uppercase tracking-widest transition-colors inline-flex items-center gap-2 px-4 py-2 rounded-full hover:bg-blue-50"
+                            >
+                                ← Volver a Conexión Simple
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Sidebar Guide */}
