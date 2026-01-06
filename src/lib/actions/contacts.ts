@@ -121,13 +121,20 @@ export async function updateContact(contactId: string, updates: Record<string, a
         const allFields = agents.flatMap(a => a.customFieldDefinitions);
         const validKeys = new Set(allFields.map(f => f.key));
 
+        console.log(`[updateContact] Valid keys for workspace ${workspaceId}:`, Array.from(validKeys));
+        console.log(`[updateContact] Received updates:`, updates);
+
         // 3. Filter updates to only include valid keys
         const filteredUpdates: Record<string, any> = {};
         for (const [key, value] of Object.entries(updates)) {
             if (validKeys.has(key)) {
                 filteredUpdates[key] = value;
+            } else {
+                console.warn(`[updateContact] Dropping invalid key: ${key}`);
             }
         }
+
+        console.log(`[updateContact] Final filtered updates:`, filteredUpdates);
 
         // 4. Merge with existing data
         const currentData = (contact.customData as Record<string, any>) || {};
