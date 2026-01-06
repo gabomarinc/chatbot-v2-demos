@@ -32,13 +32,14 @@ export function Sidebar() {
                 { id: 'channels', href: '/channels', label: 'Canales', icon: Radio, color: 'orange' },
             ]
         },
-              {
-                  title: 'COMUNICACIÓN',
-                  items: [
-                      { id: 'chat', href: '/chat', label: 'Chats', icon: MessageSquare, color: 'indigo' },
-                      { id: 'prospects', href: '/prospects', label: 'Prospectos', icon: UserCircle, color: 'pink' },
-                  ]
-              }
+        {
+            title: 'COMUNICACIÓN',
+            items: [
+                { id: 'chat', href: '/chat', label: 'Chats', icon: MessageSquare, color: 'indigo' },
+                { id: 'contacts', href: '/contacts', label: 'Contactos', icon: Users, color: 'blue' },
+                { id: 'prospects', href: '/prospects', label: 'Prospectos', icon: UserCircle, color: 'pink' },
+            ]
+        }
     ];
 
     const getColorClasses = (color: string, isActive: boolean) => {
@@ -57,7 +58,7 @@ export function Sidebar() {
     };
 
     // Filter menu sections based on user role
-    const filteredMenuSections = userRole === 'AGENT' 
+    const filteredMenuSections = userRole === 'AGENT'
         ? [
             {
                 title: 'VISIÓN GENERAL',
@@ -74,7 +75,7 @@ export function Sidebar() {
         ]
         : menuSections.map(section => ({
             ...section,
-            items: section.items.map(item => 
+            items: section.items.map(item =>
                 item.id === 'chat' ? { ...item, label: 'Chats' } : item
             )
         }));

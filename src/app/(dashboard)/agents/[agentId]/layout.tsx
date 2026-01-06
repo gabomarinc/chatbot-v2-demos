@@ -31,6 +31,7 @@ export default async function AgentLayout({
         { id: 'integrations', label: 'Integraciones', icon: '🔌', href: `/agents/${agentId}/integrations` },
         { id: 'channels', label: 'Canales', icon: '📡', href: `/agents/${agentId}/channels` },
         { id: 'settings', label: 'Configuraciones', icon: '⚙️', href: `/agents/${agentId}/settings` },
+        { id: 'fields', label: 'Campos', icon: '📝', href: `/agents/${agentId}/fields` },
     ];
 
     return (

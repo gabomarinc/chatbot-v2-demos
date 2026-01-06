@@ -42,6 +42,7 @@ model Workspace {
   usageLogs     UsageLog[]
   owner         User              @relation(fields: [ownerId], references: [id])
   members       WorkspaceMember[]
+  contacts      Contact[]         // Added relation
 }
 
 model WorkspaceMember {
@@ -86,6 +87,7 @@ model Agent {
   intents            Intent[]
   knowledgeBases     KnowledgeBase[]
   media              AgentMedia[]
+  customFieldDefinitions CustomFieldDefinition[] // Added relation
 }
 
 model KnowledgeBase {
@@ -135,6 +137,7 @@ model Conversation {
   id            String             @id @default(cuid())
   agentId       String
   channelId     String?
+  contactId     String?            // New relation to Contact
   externalId    String
   contactName   String?
   contactEmail  String?
@@ -145,6 +148,7 @@ model Conversation {
   createdAt     DateTime           @default(now())
   agent         Agent              @relation(fields: [agentId], references: [id])
   channel       Channel?           @relation(fields: [channelId], references: [id])
+  contact       Contact?           @relation(fields: [contactId], references: [id]) 
   assignedUser  User?              @relation(fields: [assignedTo], references: [id])
   messages      Message[]
 }
@@ -214,6 +218,56 @@ model AgentMedia {
 
   @@index([agentId])
   @@index([tags])
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  DATE
+  SELECT
+}
+
+model Contact {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  name          String?
+  email         String?
+  phone         String?
+  externalId    String?  // ID in external system (e.g. CRM, WhatsApp JID)
+  
+  // Dynamic Data
+  customData    Json?    // { "salary": 2000, "city": "Panama" }
+  tags          String[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  conversations Conversation[]
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([phone])
+  @@index([customData], type: Gin) // High performance filtering for JSONB
+}
+
+model CustomFieldDefinition {
+  id          String          @id @default(cuid())
+  agentId     String
+  key         String          // Machine friendly key: "monthly_salary"
+  label       String          // Human label: "Salario Mensual"
+  type        CustomFieldType
+  description String?         // Description for AI: "The user's monthly income"
+  options     String[]        // For SELECT type
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  agent       Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, key])
+  @@index([agentId])
 }
 
 model SubscriptionPlan {

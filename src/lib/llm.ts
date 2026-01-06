@@ -21,10 +21,12 @@ export async function generateAgentReply(
   conversationId: string,
   userMessage: string
 ): Promise<AgentReplyResult> {
-  // Load agent configuration
+  // Load agent configuration with custom fields
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agent = await prisma.agent.findUnique({
     where: { id: agentId },
     include: {
+      customFieldDefinitions: true,
       knowledgeBases: {
         include: {
           sources: {
@@ -35,11 +37,41 @@ export async function generateAgentReply(
           },
         },
       },
-    },
-  });
+    } as any,
+  }) as any;
 
   if (!agent) {
     throw new Error('Agent not found');
+  }
+
+  // Ensure contact exists for this conversation
+  let conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { contact: true }
+  });
+
+  if (!conversation) throw new Error("Conversation not found");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(conversation as any).contactId) {
+    // Create a new contact if one doesn't exist
+    const newContact = await prisma.contact.create({
+      data: {
+        workspaceId: agent.workspaceId,
+        name: conversation.contactName,
+        email: conversation.contactEmail,
+        externalId: conversation.externalId,
+        customData: {},
+      }
+    });
+
+    // Link to conversation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { contactId: newContact.id } as any,
+      include: { contact: true }
+    }) as any;
   }
 
   // Retrieve relevant knowledge chunks if smartRetrieval is enabled
@@ -56,42 +88,126 @@ export async function generateAgentReply(
   const messages = await prisma.message.findMany({
     where: { conversationId },
     orderBy: { createdAt: 'asc' },
-    take: 20, // Last 20 messages for context
+    take: 20, // Last 20 messages
   });
 
   // Build messages array for OpenAI
-  const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+  let openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...messages.map((msg) => ({
       role: msg.role === 'USER' ? 'user' : 'assistant',
-      content: msg.role === 'HUMAN' 
+      content: msg.role === 'HUMAN'
         ? `[Intervención humana]: ${msg.content}`
         : msg.content,
     }) as OpenAI.Chat.Completions.ChatCompletionMessageParam),
     { role: 'user', content: userMessage },
   ];
 
-  // Call OpenAI API
-  const openai = getOpenAIClient();
-  const completion = await openai.chat.completions.create({
-    model: agent.model,
-    messages: openaiMessages,
-    temperature: agent.temperature,
-    max_tokens: 1000,
-  });
+  // Define Tools
+  const tools: OpenAI.Chat.ChatCompletionTool[] = [
+    {
+      type: 'function',
+      function: {
+        name: 'update_contact',
+        description: 'Update the contact information with collected data.',
+        parameters: {
+          type: 'object',
+          properties: {
+            updates: {
+              type: 'object',
+              description: 'Key-value pairs of data to update. Keys must match the defined custom fields.',
+              additionalProperties: true
+            }
+          },
+          required: ['updates']
+        }
+      }
+    }
+  ];
 
-  const reply = completion.choices[0]?.message?.content || '';
-  const tokensUsed = completion.usage?.total_tokens || 0;
-  
-  // Calculate credits: 1 credit per 100 tokens (adjust as needed)
-  const creditsUsed = Math.ceil(tokensUsed / 100);
+  // Call OpenAI API (Loop for tool calls)
+  const openai = getOpenAIClient();
+  let finalReply = '';
+  let tokensUsed = 0;
+  let creditsUsed = 0;
+
+  // Max 3 turns to prevent infinite loops
+  for (let i = 0; i < 3; i++) {
+    const completion = await openai.chat.completions.create({
+      model: agent.model,
+      messages: openaiMessages,
+      temperature: agent.temperature,
+      max_tokens: 1000,
+      tools: tools,
+      tool_choice: 'auto'
+    });
+
+    const choice = completion.choices[0];
+    const message = choice.message;
+    tokensUsed += completion.usage?.total_tokens || 0;
+
+    // Add assistant message to history
+    openaiMessages.push(message);
+
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      // Handle Tool Calls
+      for (const toolCall of message.tool_calls) {
+        if (toolCall.function.name === 'update_contact') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const updates = args.updates;
+
+            // Perform Update using shared action
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((conversation as any).contactId) {
+              // Import dynamically to avoid circular deps if any, or just standard import
+              const { updateContact } = await import('@/lib/actions/contacts');
+              const result = await updateContact(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (conversation as any).contactId,
+                updates,
+                agent.workspaceId
+              );
+
+              if (result.success) {
+                openaiMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: JSON.stringify({ success: true, message: "Contact updated successfully" })
+                });
+              } else {
+                throw new Error(result.error);
+              }
+            } else {
+              throw new Error("No contact ID linked to conversation");
+            }
+          } catch (error) {
+            console.error("Tool execution error", error);
+            openaiMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ success: false, error: "Failed to update contact" })
+            });
+          }
+        }
+      }
+      // Loop continues to get the next response from AI
+    } else {
+      // No tool calls, this is the final reply
+      finalReply = message.content || '';
+      break;
+    }
+  }
+
+  // Calculate credits
+  creditsUsed = Math.ceil(tokensUsed / 100);
 
   // Store agent reply
   await prisma.message.create({
     data: {
       conversationId,
       role: 'AGENT',
-      content: reply,
+      content: finalReply,
       metadata: {
         tokensUsed,
         model: agent.model,
@@ -129,7 +245,7 @@ export async function generateAgentReply(
   }
 
   return {
-    reply,
+    reply: finalReply,
     tokensUsed,
     creditsUsed,
   };
@@ -198,6 +314,21 @@ function buildSystemPrompt(agent: any, contextChunks: string[]): string {
 
   if (agent.transferToHuman) {
     prompt += 'Si un usuario solicita hablar con un humano o si la situación lo requiere, puedes transferir la conversación a un agente humano.\n\n';
+  }
+
+  // Custom Fields Collection
+  if (agent.customFieldDefinitions && agent.customFieldDefinitions.length > 0) {
+    prompt += 'TU OBJETIVO SECUNDARIO ES RECOLECTAR LA SIGUIENTE INFORMACIÓN DEL USUARIO:\n';
+    agent.customFieldDefinitions.forEach((field: any) => {
+      let fieldDesc = `- ${field.label} (ID: "${field.key}"): ${field.description || 'Sin descripción'}`;
+      if (field.type === 'SELECT' && field.options && field.options.length > 0) {
+        fieldDesc += ` [Opciones válidas: ${field.options.join(', ')}]`;
+      }
+      prompt += fieldDesc + '\n';
+    });
+    prompt += '\nCuando el usuario te proporcione esta información, USA LA HERRAMIENTA "update_contact" para guardarla.\n';
+    prompt += 'Para campos con Opciones válidas, DEBES ajustar la respuesta del usuario a una de las opciones exactas si es posible, o pedir clarificación.\n';
+    prompt += 'No seas intrusivo. Pregunta por estos datos de manera natural durante la conversación.\n';
   }
 
   return prompt.trim();
