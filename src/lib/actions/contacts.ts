@@ -101,21 +101,20 @@ export async function updateContact(contactId: string, updates: Record<string, a
         // 2. Fetch custom fields definitions to validate
         // We need to find the agent(s) associated with this contact's workspace to know valid fields.
         // OR, we can just fetch all custom fields for the workspace.
-        const workspace = await prisma.workspace.findUnique({
-            where: { id: workspaceId },
+        // 2. Fetch custom fields definitions to validate
+        const agents = await prisma.agent.findMany({
+            where: { workspaceId },
             include: {
-                agents: {
-                    include: {
-                        customFieldDefinitions: true
-                    }
-                }
-            } as any
+                customFieldDefinitions: true
+            }
         });
 
-        if (!workspace) throw new Error('Workspace not found');
+        if (agents.length === 0) {
+            // If no agents, assume no custom fields.
+        }
 
         // Flatten all available fields in the workspace
-        const allFields = workspace.agents.flatMap(a => a.customFieldDefinitions);
+        const allFields = agents.flatMap(a => a.customFieldDefinitions);
         const validKeys = new Set(allFields.map(f => f.key));
 
         // 3. Filter updates to only include valid keys
