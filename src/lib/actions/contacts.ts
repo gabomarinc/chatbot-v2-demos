@@ -5,8 +5,8 @@ import { Prisma } from '@prisma/client';
 
 export interface FilterCondition {
     field: string; // "monthly_salary" or "city"
-    operator: 'equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'in';
-    value: any;
+    operator: 'equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'in' | 'isSet' | 'isNotSet';
+    value?: any;
 }
 
 export interface GetContactsOptions {
@@ -25,13 +25,6 @@ export async function getContacts({ workspaceId, filters = [], page = 1, pageSiz
 
         if (filters.length > 0) {
             // Build JSONB filter query
-            // Note: Prisma has limited support for complex JSONB filtering directly in typed where input
-            // We might need raw query for complex JSON operators or use path access.
-            // For simple "equals" or "contains" on top level keys, specific syntax applies.
-
-            // However, Prisma Client supports some JSON filtering.
-            // AND: [ { customData: { path: ['field'], equals: value } } ]
-
             const jsonFilters = filters.map(filter => {
                 const { field, operator, value } = filter;
                 let prismaOp: any = {};
@@ -40,11 +33,22 @@ export async function getContacts({ workspaceId, filters = [], page = 1, pageSiz
                 if (operator === 'equals') {
                     prismaOp = { equals: value };
                 } else if (operator === 'contains' && typeof value === 'string') {
-                    prismaOp = { string_contains: value }; // Prisma JSON filter syntax might vary by version
+                    prismaOp = { string_contains: value };
                 } else if (operator === 'gt') {
                     prismaOp = { gt: Number(value) };
                 } else if (operator === 'lt') {
                     prismaOp = { lt: Number(value) };
+                } else if (operator === 'isSet') {
+                    // Check if path is NOT null (meaning it exists)
+                    // In Prisma JSON filtering, not: null checks for JSON null or DB null depending on driver, 
+                    // but typically path access returns null if missing.
+                    // "not: Prisma.DbNull" is safer for "field exists" if using specific Json types, 
+                    // but "not: null" is the standard JS way often translated.
+                    // Let's use `not: Prisma.AnyNull` or simple `not: null` which usually works for "is not null"
+                    prismaOp = { not: Prisma.JsonNull };
+                } else if (operator === 'isNotSet') {
+                    // Check if it is null (missing or explicit null)
+                    prismaOp = { equals: Prisma.JsonNull };
                 }
 
                 return {
