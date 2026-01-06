@@ -720,45 +720,46 @@ INSTRUCCIONES DE EJECUCIÓN:
                         if (name === "update_contact") {
                             console.log('[WIDGET] Tool update_contact called with:', args);
 
-                            // HEURISTIC: Fix common LLM mistake of sending top-level keys instead of nested 'updates'
-                            if (!args.updates && (args.name || args.email || args.phone)) {
-                                console.warn('[WIDGET] Detected top-level contact fields, moving to updates object');
-                                args.updates = {};
-                                if (args.name) args.updates.name = args.name;
-                                if (args.email) args.updates.email = args.email;
-                                if (args.phone) args.updates.phone = args.phone;
+                            // Helper to normalize keys to lowercase
+                            const normalizeKeys = (obj: any) => {
+                                if (!obj || typeof obj !== 'object') return {};
+                                const newObj: any = {};
+                                for (const [k, v] of Object.entries(obj)) {
+                                    newObj[k.toLowerCase()] = v;
+                                }
+                                return newObj;
+                            };
+
+                            let normalizedArgs = normalizeKeys(args);
+                            let updates = normalizeKeys(normalizedArgs.updates || {});
+
+                            // HEURISTIC: If 'updates' is empty but top-level fields exist, use them
+                            if (Object.keys(updates).length === 0) {
+                                if (normalizedArgs.name) updates.name = normalizedArgs.name;
+                                if (normalizedArgs.email) updates.email = normalizedArgs.email;
+                                if (normalizedArgs.phone) updates.phone = normalizedArgs.phone;
                             }
 
-                            // Normalize keys (Name -> name, Email -> email) to be safe
-                            let updates = args.updates || {};
-                            const normalizedUpdates: Record<string, any> = {};
-                            for (const [k, v] of Object.entries(updates)) {
-                                const lower = k.toLowerCase();
-                                if (['name', 'email', 'phone'].includes(lower)) {
-                                    normalizedUpdates[lower] = v;
-                                } else {
-                                    normalizedUpdates[k] = v;
-                                }
-                            }
-                            args.updates = normalizedUpdates; // Assign specific object
+                            // Assign back for consistency
+                            args.updates = updates;
 
                             if (conversation.contactId) {
                                 try {
                                     const { updateContact } = await import('@/lib/actions/contacts');
                                     const result = await updateContact(
                                         conversation.contactId,
-                                        normalizedUpdates, // Pass normalized object directly
+                                        updates, // Pass normalized object
                                         workspace.id
                                     );
 
                                     // Sync name to conversation if updated
-                                    if (args.updates?.name) {
+                                    if (updates.name) {
                                         await prisma.conversation.update({
                                             where: { id: conversation.id },
-                                            data: { contactName: args.updates.name }
+                                            data: { contactName: updates.name }
                                         });
                                         // Update local object
-                                        conversation.contactName = args.updates.name;
+                                        conversation.contactName = updates.name;
                                     }
 
                                     toolResult = result.success
