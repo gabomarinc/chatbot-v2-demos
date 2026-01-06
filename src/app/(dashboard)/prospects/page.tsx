@@ -7,6 +7,11 @@ export default async function ProspectsBuilderPage() {
     // In a real app, this would come from the user's session or selected workspace context.
     // For this implementation, we will fetch the first available workspace to ensure functionality.
     const workspace = await prisma.workspace.findFirst({
+        where: {
+            agents: {
+                some: {} // Ensure we pick a workspace that actually has agents
+            }
+        },
         include: {
             agents: {
                 include: {

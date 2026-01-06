@@ -170,6 +170,7 @@ export async function generateAgentReply(
           try {
             const args = JSON.parse((toolCall as any).function.arguments);
             const updates = args.updates;
+            console.log(`[LLM] Tool 'update_contact' called with:`, updates);
 
             // Perform Update using shared action
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
