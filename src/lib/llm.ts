@@ -155,7 +155,7 @@ export async function generateAgentReply(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((toolCall as any).function.name === 'update_contact') {
           try {
-            const args = JSON.parse(toolCall.function.arguments);
+            const args = JSON.parse((toolCall as any).function.arguments);
             const updates = args.updates;
 
             // Perform Update using shared action
