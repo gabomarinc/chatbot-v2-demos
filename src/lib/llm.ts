@@ -152,7 +152,8 @@ export async function generateAgentReply(
     if (message.tool_calls && message.tool_calls.length > 0) {
       // Handle Tool Calls
       for (const toolCall of message.tool_calls) {
-        if (toolCall.function.name === 'update_contact') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((toolCall as any).function.name === 'update_contact') {
           try {
             const args = JSON.parse(toolCall.function.arguments);
             const updates = args.updates;
