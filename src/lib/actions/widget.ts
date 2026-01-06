@@ -498,6 +498,18 @@ INSTRUCCIONES DE EJECUCIÓN:
                             let toolResult;
                             if (name === "update_contact") {
                                 console.log('[GEMINI] Tool update_contact called with:', args);
+                                // Normalize keys (Name -> name, Email -> email) to be safe
+                                let updates = (args as any).updates || {};
+                                const normalizedUpdates: Record<string, any> = {};
+                                for (const [k, v] of Object.entries(updates)) {
+                                    const lower = k.toLowerCase();
+                                    if (['name', 'email', 'phone'].includes(lower)) {
+                                        normalizedUpdates[lower] = v;
+                                    } else {
+                                        normalizedUpdates[k] = v;
+                                    }
+                                }
+                                (args as any).updates = normalizedUpdates;
                                 if (conversation.contactId) {
                                     try {
                                         const { updateContact } = await import('@/lib/actions/contacts');
@@ -696,6 +708,18 @@ INSTRUCCIONES DE EJECUCIÓN:
                         let toolResult;
                         if (name === "update_contact") {
                             console.log('[WIDGET] Tool update_contact called with:', args);
+                            // Normalize keys (Name -> name, Email -> email) to be safe
+                            let updates = args.updates || {};
+                            const normalizedUpdates: Record<string, any> = {};
+                            for (const [k, v] of Object.entries(updates)) {
+                                const lower = k.toLowerCase();
+                                if (['name', 'email', 'phone'].includes(lower)) {
+                                    normalizedUpdates[lower] = v;
+                                } else {
+                                    normalizedUpdates[k] = v;
+                                }
+                            }
+                            args.updates = normalizedUpdates;
                             if (conversation.contactId) {
                                 try {
                                     const { updateContact } = await import('@/lib/actions/contacts');
