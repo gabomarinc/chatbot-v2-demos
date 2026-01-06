@@ -44,7 +44,8 @@ export async function sendWidgetMessage(data: {
                     include: {
                         workspace: { include: { creditBalance: true } },
                         integrations: { where: { provider: 'GOOGLE_CALENDAR', enabled: true } },
-                        intents: { where: { enabled: true } }
+                        intents: { where: { enabled: true } },
+                        customFieldDefinitions: true
                     }
                 }
             }
@@ -296,35 +297,70 @@ INSTRUCCIONES DE EJECUCIÓN:
 6. EXTRACCIÓN DE DATOS: Si el usuario menciona su nombre o correo electrónico, extráelos y guárdalos internamente para personalizar futuras interacciones.
 `;
 
-            // Define tools for Calendar and Image Search
-            const tools: any[] = hasCalendar ? [
-                {
-                    name: "revisar_disponibilidad",
-                    description: "Consulta los eventos ocupados en una fecha específica para ver disponibilidad.",
-                    parameters: {
-                        type: "object",
-                        properties: {
-                            fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD" }
-                        },
-                        required: ["fecha"]
+            // Custom Fields Collection
+            if ((agent as any).customFieldDefinitions && (agent as any).customFieldDefinitions.length > 0) {
+                systemPrompt += '\nTU OBJETIVO SECUNDARIO ES RECOLECTAR LA SIGUIENTE INFORMACIÓN DEL USUARIO:\n';
+                (agent as any).customFieldDefinitions.forEach((field: any) => {
+                    let fieldDesc = `- ${field.label} (ID: "${field.key}"): ${field.description || 'Sin descripción'}`;
+                    if (field.type === 'SELECT' && field.options && field.options.length > 0) {
+                        fieldDesc += ` [Opciones válidas: ${field.options.join(', ')}]`;
                     }
-                },
+                    systemPrompt += fieldDesc + '\n';
+                });
+                systemPrompt += '\nCuando el usuario te proporcione esta información, USA LA HERRAMIENTA "update_contact" para guardarla.\n';
+                systemPrompt += 'Para campos con Opciones válidas, DEBES ajustar la respuesta del usuario a una de las opciones exactas si es posible, o pedir clarificación.\n';
+                systemPrompt += 'No seas intrusivo. Pregunta por estos datos de manera natural durante la conversación.\n';
+            }
+
+            // Define tools for Calendar and Image Search, and Contact Update
+            const tools: any[] = [
                 {
-                    name: "agendar_cita",
-                    description: "Crea un evento en el calendario de Google.",
+                    name: 'update_contact',
+                    description: 'Update the contact information with collected data.',
                     parameters: {
-                        type: "object",
+                        type: 'object',
                         properties: {
-                            resumen: { type: "string", description: "Título de la cita" },
-                            descripcion: { type: "string", description: "Detalles adicionales" },
-                            inicio: { type: "string", description: "Fecha y hora de inicio (ISO 8601)" },
-                            fin: { type: "string", description: "Fecha y hora de fin (ISO 8601)" },
-                            email: { type: "string", description: "Email del invitado (opcional)" }
+                            updates: {
+                                type: 'object',
+                                description: 'Key-value pairs of data to update. Keys must match the defined custom fields.',
+                                additionalProperties: true
+                            }
                         },
-                        required: ["resumen", "inicio", "fin"]
+                        required: ['updates']
                     }
                 }
-            ] : [];
+            ];
+
+            if (hasCalendar) {
+                tools.push(
+                    {
+                        name: "revisar_disponibilidad",
+                        description: "Consulta los eventos ocupados en una fecha específica para ver disponibilidad.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD" }
+                            },
+                            required: ["fecha"]
+                        }
+                    },
+                    {
+                        name: "agendar_cita",
+                        description: "Crea un evento en el calendario de Google.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                resumen: { type: "string", description: "Título de la cita" },
+                                descripcion: { type: "string", description: "Detalles adicionales" },
+                                inicio: { type: "string", description: "Fecha y hora de inicio (ISO 8601)" },
+                                fin: { type: "string", description: "Fecha y hora de fin (ISO 8601)" },
+                                email: { type: "string", description: "Email del invitado (opcional)" }
+                            },
+                            required: ["resumen", "inicio", "fin"]
+                        }
+                    }
+                );
+            }
 
             // Try Gemini first if model is Gemini, with fallback to OpenAI
             let useOpenAI = false;
@@ -591,7 +627,27 @@ INSTRUCCIONES DE EJECUCIÓN:
                         const { name, arguments: argsJson } = toolCall.function;
                         const args = JSON.parse(argsJson);
                         let toolResult;
-                        if (name === "revisar_disponibilidad") {
+                        if (name === "update_contact") {
+                            console.log('[WIDGET] Tool update_contact called with:', args);
+                            if (conversation.contactId) {
+                                try {
+                                    const { updateContact } = await import('@/lib/actions/contacts');
+                                    const result = await updateContact(
+                                        conversation.contactId,
+                                        args.updates,
+                                        workspace.id
+                                    );
+                                    toolResult = result.success
+                                        ? { success: true, message: "Contact updated successfully" }
+                                        : { success: false, error: result.error };
+                                } catch (e) {
+                                    console.error('[WIDGET] updateContact error:', e);
+                                    toolResult = { success: false, error: "Failed to update contact" };
+                                }
+                            } else {
+                                toolResult = { success: false, error: "No contact ID linked" };
+                            }
+                        } else if (name === "revisar_disponibilidad") {
                             toolResult = await listAvailableSlots(calendarIntegration.configJson, args.fecha);
                         } else if (name === "agendar_cita") {
                             toolResult = await createCalendarEvent(calendarIntegration.configJson, args);
