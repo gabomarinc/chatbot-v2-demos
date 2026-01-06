@@ -265,7 +265,7 @@ export async function sendWidgetMessage(data: {
                 .map(m => `- ${m.prompt}`)
                 .join('\n');
 
-            const systemPrompt = `IDENTIDAD Y CONTEXTO LABORAL (FUNDAMENTAL):
+            let systemPrompt = `IDENTIDAD Y CONTEXTO LABORAL (FUNDAMENTAL):
 Eres ${agent.name}, el asistente oficial de ${agent.jobCompany || 'la empresa'}.
 Sitio Web Oficial: ${agent.jobWebsiteUrl || 'No especificado'}
 Tu Objetivo: ${agent.jobType === 'SALES' ? 'COMERCIAL (Enfocado en ventas y conversión)' : agent.jobType === 'SUPPORT' ? 'SOPORTE (Ayuda técnica y resolución)' : 'ASISTENTE GENERAL'}
