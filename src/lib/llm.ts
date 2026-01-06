@@ -53,25 +53,38 @@ export async function generateAgentReply(
   if (!conversation) throw new Error("Conversation not found");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (!(conversation as any).contactId) {
-    // Create a new contact if one doesn't exist
-    const newContact = await prisma.contact.create({
-      data: {
-        workspaceId: agent.workspaceId,
-        name: conversation.contactName,
-        email: conversation.contactEmail,
-        externalId: conversation.externalId,
-        customData: {},
-      }
-    });
+  if (!conversation.contactId) {
+    console.log(`[LLM] No contact linked for conversation ${conversationId}. Creating new contact...`);
+    try {
+      // Create a new contact if one doesn't exist
+      const newContact = await prisma.contact.create({
+        data: {
+          workspaceId: agent.workspaceId,
+          name: conversation.contactName || 'Visitante',
+          email: conversation.contactEmail,
+          externalId: conversation.externalId,
+          customData: {},
+        }
+      });
+      console.log(`[LLM] Created contact ${newContact.id}`);
 
-    // Link to conversation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    conversation = await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { contactId: newContact.id } as any,
-      include: { contact: true }
-    }) as any;
+      // Link to conversation
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updatedConversation = await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { contactId: newContact.id },
+        include: { contact: true }
+      });
+
+      // Update local variable
+      conversation = updatedConversation as any;
+      console.log(`[LLM] Linked contact to conversation.`);
+    } catch (error) {
+      console.error(`[LLM] Error creating/linking contact:`, error);
+      // Continue execution, don't crash the chat, but maybe notify?
+    }
+  } else {
+    console.log(`[LLM] Contact matches: ${conversation.contactId}`);
   }
 
   // Retrieve relevant knowledge chunks if smartRetrieval is enabled
