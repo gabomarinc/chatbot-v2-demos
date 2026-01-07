@@ -706,7 +706,7 @@ When calling 'update_contact':
                     })()
                 ];
 
-                const openAiTools = hasCalendar ? tools.map(t => ({
+                const openAiTools = tools.length > 0 ? tools.map(t => ({
                     type: 'function',
                     function: t
                 })) : undefined;
