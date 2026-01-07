@@ -137,7 +137,9 @@ INSTRUCCIONES DE EJECUCIÓN:
     ] : [];
 
     if (agent.model.includes('gemini')) {
+        console.log('[TESTING] Using Gemini. Key configured:', !!googleKey);
         if (!googleKey) throw new Error("Google API Key not configured")
+
         const genAI = new GoogleGenerativeAI(googleKey)
         const geminiTools = hasCalendar ? [{
             functionDeclarations: tools.map(t => ({
@@ -147,8 +149,19 @@ INSTRUCCIONES DE EJECUCIÓN:
             }))
         }] : undefined;
 
+        // Map model names to correct API model identifiers
+        // Use logic from widget.ts for consistency
+        let geminiModelName = agent.model;
+        if (agent.model === 'gemini-1.5-flash') {
+            geminiModelName = 'gemini-1.5-flash-001';
+        } else if (agent.model === 'gemini-1.5-pro') {
+            geminiModelName = 'gemini-1.5-pro-001';
+        }
+
+        console.log('[TESTING] Gemini Model:', geminiModelName);
+
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash",
+            model: geminiModelName,
             systemInstruction: systemPrompt,
             generationConfig: { temperature: agent.temperature },
             tools: geminiTools as any
@@ -160,29 +173,36 @@ INSTRUCCIONES DE EJECUCIÓN:
         }))
 
         const chat = model.startChat({ history: geminiHistory })
-        let result = await chat.sendMessage(content)
 
-        // Handle tool calls for Gemini
-        let call = result.response.functionCalls()?.[0];
-        while (call) {
-            const { name, args } = call;
-            let toolResult;
-            if (name === "revisar_disponibilidad") {
-                toolResult = await listAvailableSlots(calendarIntegration.configJson, (args as any).fecha);
-            } else if (name === "agendar_cita") {
-                toolResult = await createCalendarEvent(calendarIntegration.configJson, args as any);
+        try {
+            let result = await chat.sendMessage(content)
+
+            // Handle tool calls for Gemini
+            let call = result.response.functionCalls()?.[0];
+            while (call) {
+                const { name, args } = call;
+                let toolResult;
+                if (name === "revisar_disponibilidad") {
+                    toolResult = await listAvailableSlots(calendarIntegration.configJson, (args as any).fecha);
+                } else if (name === "agendar_cita") {
+                    toolResult = await createCalendarEvent(calendarIntegration.configJson, args as any);
+                }
+
+                result = await chat.sendMessage([{
+                    functionResponse: {
+                        name,
+                        response: { result: toolResult }
+                    }
+                }]);
+                call = result.response.functionCalls()?.[0];
             }
 
-            result = await chat.sendMessage([{
-                functionResponse: {
-                    name,
-                    response: { result: toolResult }
-                }
-            }]);
-            call = result.response.functionCalls()?.[0];
+            replyContent = result.response.text()
+        } catch (error: any) {
+            console.error("[TESTING] Gemini Execution Error:", error);
+            // Throw clearer error for UI
+            throw new Error(`Gemini Error: ${error.message || 'Unknown error'}`);
         }
-
-        replyContent = result.response.text()
     } else {
         if (!openaiKey) throw new Error("OpenAI API Key not configured")
         const openai = new OpenAI({ apiKey: openaiKey })
