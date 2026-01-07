@@ -377,7 +377,7 @@ When calling 'update_contact':
                         properties: {
                             updates: {
                                 type: 'object',
-                                description: 'Object containing the fields to update. EXAMPLE: { "name": "Donald", "salary": 5000 }.',
+                                description: 'Object containing the fields to update. EXAMPLE: { "name": "Donald", "salario_mensual": 5000, "otro_campo": "valor" }.',
                                 properties: {
                                     name: { type: 'string', description: "User's full name. Extract carefully." },
                                     email: { type: 'string', description: "User's email address" },
