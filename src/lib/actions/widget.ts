@@ -355,7 +355,17 @@ INSTRUCCIONES DE EJECUCIÓN:
             }
 
             // Global instruction for standard fields
-            systemPrompt += '\nIMPORTANTE: Si el usuario te proporciona su Nombre, Email o Teléfono, DEBES usar la herramienta "update_contact" para guardarlos, independientemente de los campos personalizados. Usa las claves constantes "name", "email" y "phone".\n';
+            systemPrompt += `
+CRITICAL INSTRUCTIONS FOR DATA SAVING:
+1. YOU ARE RESPONSIBLE for saving user data. Use the 'update_contact' tool.
+2. IF the user provides their Name, Email, Phone, or ANY data matching the CUSTOM FIELDS defined above, you MUST call 'update_contact' IMMEDIATELY.
+3. DO NOT just acknowledge data in text. You MUST call the tool to save it.
+4. If you fail to call the tool, the data is lost.
+
+When calling 'update_contact':
+- Extract Name, Email, Phone (standard fields).
+- Map user input to the *exact* custom field keys defined above (e.g. if field is "salary", map "5000" to "salary").
+`;
 
             // Define tools for Calendar and Image Search, and Contact Update
             const tools: any[] = [
@@ -367,9 +377,9 @@ INSTRUCCIONES DE EJECUCIÓN:
                         properties: {
                             updates: {
                                 type: 'object',
-                                description: 'Object containing the fields to update.',
+                                description: 'Object containing the fields to update. EXAMPLE: { "name": "Donald", "salary": 5000 }.',
                                 properties: {
-                                    name: { type: 'string', description: "User's full name" },
+                                    name: { type: 'string', description: "User's full name. Extract carefully." },
                                     email: { type: 'string', description: "User's email address" },
                                     phone: { type: 'string', description: "User's phone number" }
                                 },
