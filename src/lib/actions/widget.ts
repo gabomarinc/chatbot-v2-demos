@@ -373,6 +373,26 @@ INSTRUCCIONES DE EJECUCIÓN:
                 }
             ];
 
+            // Setup Custom Fields in Tool Schema
+            if ((agent as any).customFieldDefinitions && (agent as any).customFieldDefinitions.length > 0) {
+                const updatesProps = tools[0].parameters.properties.updates.properties;
+                (agent as any).customFieldDefinitions.forEach((field: any) => {
+                    let type = 'string';
+                    if (field.type === 'NUMBER') type = 'number';
+                    if (field.type === 'BOOLEAN') type = 'boolean';
+
+                    updatesProps[field.key] = {
+                        type,
+                        description: field.description || `Value for ${field.label}`
+                    };
+
+                    if (field.type === 'SELECT' && field.options && field.options.length > 0) {
+                        updatesProps[field.key].enum = field.options;
+                        updatesProps[field.key].description += ` (Valid options: ${field.options.join(', ')})`;
+                    }
+                });
+            }
+
             if (hasCalendar) {
                 tools.push(
                     {
