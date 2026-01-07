@@ -352,14 +352,20 @@ INSTRUCCIONES DE EJECUCIÓN:
             const tools: any[] = [
                 {
                     name: 'update_contact',
-                    description: 'Update the contact information with collected data.',
+                    description: 'Update the contact information with collected data. Use this tool whenever the user provides their name, email, phone, or other requested info.',
                     parameters: {
                         type: 'object',
                         properties: {
                             updates: {
                                 type: 'object',
-                                description: 'Key-value pairs of data to update. Keys can be standard fields (name, email, phone) or match the defined custom fields.',
-                                additionalProperties: true
+                                description: 'Object containing the fields to update.',
+                                properties: {
+                                    name: { type: 'string', description: "User's full name" },
+                                    email: { type: 'string', description: "User's email address" },
+                                    phone: { type: 'string', description: "User's phone number" }
+                                },
+                                additionalProperties: true,
+                                required: []
                             }
                         },
                         required: ['updates']
