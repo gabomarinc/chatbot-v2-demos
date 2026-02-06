@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Paperclip, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
     id: string;
@@ -352,19 +353,29 @@ export function WidgetInterface({ channel }: WidgetInterfaceProps) {
                                     }
                                     return null;
                                 })()}
-                                <p className="leading-relaxed whitespace-pre-wrap">
-                                    {/* Render content with bold formatting */}
-                                    {(() => {
-                                        // Simple parser for **bold** text
-                                        const parts = msg.content.split(/(\*\*.*?\*\*)/g);
-                                        return parts.map((part, index) => {
-                                            if (part.startsWith('**') && part.endsWith('**')) {
-                                                return <strong key={index}>{part.slice(2, -2)}</strong>;
-                                            }
-                                            return part;
-                                        });
-                                    })()}
-                                </p>
+                                <div className="markdown-content text-sm leading-relaxed">
+                                    <ReactMarkdown
+                                        components={{
+                                            a: ({ node, ...props }) => (
+                                                <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-600 break-all" />
+                                            ),
+                                            img: ({ node, ...props }) => (
+                                                <img {...props} className="rounded-lg max-w-full h-auto my-2" />
+                                            ),
+                                            p: ({ node, ...props }) => (
+                                                <p {...props} className="mb-1 last:mb-0" />
+                                            ),
+                                            ul: ({ node, ...props }) => (
+                                                <ul {...props} className="list-disc ml-4 my-2" />
+                                            ),
+                                            ol: ({ node, ...props }) => (
+                                                <ol {...props} className="list-decimal ml-4 my-2" />
+                                            ),
+                                        }}
+                                    >
+                                        {msg.content}
+                                    </ReactMarkdown>
+                                </div>
                                 <span className={cn(
                                     "text-[10px] block mt-1 font-medium opacity-70",
                                     isUser ? "text-right text-gray-400" : "text-left text-white/80"
