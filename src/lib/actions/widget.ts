@@ -412,6 +412,21 @@ When calling 'update_contact':
                 });
             }
 
+            // ADDED: Tool for searching images
+            if (agentMedia.length > 0) {
+                tools.push({
+                    name: "buscar_imagen",
+                    description: "Busca una imagen en la galería del agente por palabras clave.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            query: { type: "string", description: "Palabras clave para buscar la imagen (ej: 'casa moderna', 'neumático', 'sala')" }
+                        },
+                        required: ["query"]
+                    }
+                });
+            }
+
             if (hasCalendar) {
                 tools.push(
                     {
