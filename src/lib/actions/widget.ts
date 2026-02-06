@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { Message } from '@prisma/client';
 import { generateEmbedding, cosineSimilarity } from '@/lib/ai';
 import { listAvailableSlots, createCalendarEvent } from '@/lib/google';
-import { searchAgentMedia } from '@/lib/actions/agent-media';
+import { searchAgentMedia, internalSearchAgentMedia } from '@/lib/actions/agent-media';
 
 export async function sendWidgetMessage(data: {
     channelId: string;
@@ -617,7 +617,7 @@ When calling 'update_contact':
                             } else if (name === "buscar_imagen") {
                                 // Search for images matching the query
                                 const query = (args as any).query;
-                                const foundMedia = await searchAgentMedia(channel.agentId, query);
+                                const foundMedia = await internalSearchAgentMedia(channel.agentId, query);
                                 if (foundMedia.length > 0) {
                                     // Return the first matching image
                                     const image = foundMedia[0];
@@ -903,7 +903,7 @@ When calling 'update_contact':
                         } else if (name === "buscar_imagen") {
                             // Search for images matching the query
                             const query = args.query;
-                            const foundMedia = await searchAgentMedia(channel.agentId, query);
+                            const foundMedia = await internalSearchAgentMedia(channel.agentId, query);
                             if (foundMedia.length > 0) {
                                 // Return the first matching image
                                 const image = foundMedia[0];

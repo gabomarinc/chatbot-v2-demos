@@ -36,7 +36,7 @@ export async function getAgentMedia(agentId: string) {
     // Verificar permisos
     const isOwner = agent.workspace.ownerId === session.user.id;
     const isMember = agent.workspace.members.length > 0;
-    
+
     if (!isOwner && !isMember) {
         throw new Error('Unauthorized');
     }
@@ -88,7 +88,7 @@ export async function uploadAgentMedia(
     // Verificar permisos
     const isOwner = agent.workspace.ownerId === session.user.id;
     const isMember = agent.workspace.members.length > 0;
-    
+
     if (!isOwner && !isMember) {
         throw new Error('Unauthorized');
     }
@@ -108,7 +108,7 @@ export async function uploadAgentMedia(
     const buffer = Buffer.from(arrayBuffer);
     const timestamp = Date.now();
     const fileName = `${timestamp}-${file.name}`;
-    
+
     const url = await uploadFileToR2(buffer, fileName, file.type);
 
     // Guardar en base de datos
@@ -163,7 +163,7 @@ export async function deleteAgentMedia(mediaId: string) {
     // Verificar permisos
     const isOwner = media.agent.workspace.ownerId === session.user.id;
     const isMember = media.agent.workspace.members.length > 0;
-    
+
     if (!isOwner && !isMember) {
         throw new Error('Unauthorized');
     }
@@ -207,12 +207,47 @@ export async function searchAgentMedia(agentId: string, query: string) {
     // Verificar permisos
     const isOwner = agent.workspace.ownerId === session.user.id;
     const isMember = agent.workspace.members.length > 0;
-    
+
     if (!isOwner && !isMember) {
         throw new Error('Unauthorized');
     }
 
     // Buscar por tags o descripción
+    const media = await prisma.agentMedia.findMany({
+        where: {
+            agentId,
+            OR: [
+                {
+                    tags: {
+                        hasSome: [query.toLowerCase()]
+                    }
+                },
+                {
+                    description: {
+                        contains: query,
+                        mode: 'insensitive'
+                    }
+                },
+                {
+                    fileName: {
+                        contains: query,
+                        mode: 'insensitive'
+                    }
+                }
+            ]
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    return media;
+}
+
+/**
+ * Busca imágenes de un agente por tags o descripción (USO INTERNO - SIN AUTH)
+ * Para usar en el widget público donde no hay sesión de usuario
+ */
+export async function internalSearchAgentMedia(agentId: string, query: string) {
+    // Buscar directamente sin verificar auth
     const media = await prisma.agentMedia.findMany({
         where: {
             agentId,
